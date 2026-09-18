@@ -1,13 +1,13 @@
 // Service Worker for FreshTrack — caches the app shell so the interface
 // loads instantly and works offline after the first visit.
 
-const CACHE_NAME = 'freshtrack-shell-v3';
+const CACHE_NAME = 'freshtrack-shell-v4';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -85,8 +85,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'FreshTrack', {
       body: data.body,
-      icon: './icons/icon-192.png',
-      badge: './icons/icon-192.png',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
     })
   );
 });

@@ -872,41 +872,39 @@ async function subscribeToPush(){
   showToast('Step 2: checks passed', 4000);
   await _sleep(1500);
 
-  console.log('[subscribeToPush] about to poll for an activated service worker');
-  showToast('About to check service worker...', 3000);
+  // Dump every registration + controller status before waiting, to catch a
+  // duplicate/wrong-scope registration if one exists.
+  try{
+    const allRegs = await navigator.serviceWorker.getRegistrations();
+    const scopes = allRegs.map(r => `${r.scope}(${r.active?.state ?? 'no-active'})`).join(', ') || 'none';
+    const hasController = !!navigator.serviceWorker.controller;
+    console.log(`[subscribeToPush] registrations: [${scopes}] controller=${hasController}`);
+    showToast(`Registrations: ${allRegs.length} [${scopes}], controller=${hasController}`, 4000);
+    await _sleep(1500);
+  }catch(err){
+    console.error('[subscribeToPush] getRegistrations() failed', err);
+  }
 
   let reg;
-  const swPollStart = Date.now();
-  const SW_POLL_TIMEOUT_MS = 10000;
-  let attempt = 0;
-  while(true){
-    attempt++;
-    let candidate;
-    try{
-      candidate = await navigator.serviceWorker.getRegistration();
-    }catch(err){
-      console.error('[subscribeToPush] getRegistration() failed', err);
-      showToast('Step 3 FAILED: ' + err.message, 4000);
+  try{
+    console.log('[subscribeToPush] about to await navigator.serviceWorker.ready');
+    showToast('About to check service worker...', 3000);
+    const SW_TIMEOUT = Symbol('sw-timeout');
+    const result = await Promise.race([
+      navigator.serviceWorker.ready,
+      _sleep(10000).then(()=> SW_TIMEOUT),
+    ]);
+    if(result === SW_TIMEOUT){
+      showToast('Service worker timeout: not ready after 10s', 5000);
       return;
     }
-    const activeState = candidate?.active?.state ?? 'no-registration';
-    const hasController = !!navigator.serviceWorker.controller;
-    console.log(`[subscribeToPush] attempt ${attempt}: active.state=${activeState} controller=${hasController}`);
-    showToast(`Attempt ${attempt}: active=${activeState}, controller=${hasController}`, 2500);
-
-    if(activeState === 'activated'){
-      reg = candidate;
-      break;
-    }
-
-    if(Date.now() - swPollStart >= SW_POLL_TIMEOUT_MS){
-      showToast('Step 3 FAILED: not activated after 10s (last state: ' + activeState + ')', 5000);
-      return;
-    }
-
-    await _sleep(1000);
+    reg = result;
+  }catch(err){
+    console.error('[subscribeToPush] service worker not ready', err);
+    showToast('Step 3 FAILED: ' + err.message, 4000);
+    return;
   }
-  showToast('Step 3: service worker activated', 4000);
+  showToast('Step 3: service worker ready (state=' + (reg.active?.state ?? 'unknown') + ')', 4000);
   await _sleep(1500);
 
   let sub;
