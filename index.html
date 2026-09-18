@@ -874,7 +874,18 @@ async function subscribeToPush(){
 
   let reg;
   try{
-    reg = await navigator.serviceWorker.ready;
+    console.log('[subscribeToPush] about to check navigator.serviceWorker.ready');
+    showToast('About to check service worker...', 3000);
+    const SW_TIMEOUT = Symbol('sw-timeout');
+    const result = await Promise.race([
+      navigator.serviceWorker.ready,
+      _sleep(5000).then(()=> SW_TIMEOUT),
+    ]);
+    if(result === SW_TIMEOUT){
+      showToast('Service worker timeout: not ready after 5s', 5000);
+      return;
+    }
+    reg = result;
   }catch(err){
     console.error('[subscribeToPush] service worker not ready', err);
     showToast('Step 3 FAILED: ' + err.message, 4000);
