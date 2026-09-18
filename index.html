@@ -822,10 +822,17 @@ async function loadItemsFromCloud(){
 // when signed in, no-ops silently when not (pure localStorage mode).
 async function syncItemToCloud(item){
   if(!currentUser) return;
-  await sb.from('items').upsert({
-    id: item.id, user_id: currentUser.id, name: item.name,
-    category: item.category, expiry_date: item.expiryDate, from_label: !!item.fromLabel,
-  });
+  try{
+    const { error } = await sb.from('items').upsert({
+      id: item.id, user_id: currentUser.id, name: item.name,
+      category: item.category, expiry_date: item.expiryDate, from_label: !!item.fromLabel,
+    });
+    if(error) throw error;
+    showToast('Saved to cloud successfully', 3000);
+  }catch(error){
+    console.error('[syncItemToCloud] failed', error);
+    showToast('Save FAILED: ' + JSON.stringify(error), 5000);
+  }
 }
 
 async function deleteItemFromCloud(id){
