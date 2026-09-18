@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" id="htmlRoot">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>FreshTrack — Expiry Tracker</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#211D18">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FreshTrack">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --paper:#FAF6EE;
+    --ink:#211D18;
+    --ink-soft:#6E6858;
+    --green:#2D6A4F;
+    --green-bg:#E4EFE7;
+    --amber:#D9711F;
+    --amber-bg:#FBE7D4;
+    --red:#B23A2E;
+    --red-bg:#F7E3DE;
+    --line:#D8CFB8;
+    --blue-bg:#E3EDF5;
+    --rose-bg:#F6E4E2;
+    --tan-bg:#F1E6D2;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 20% -10%, rgba(45,106,79,0.08), transparent),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(217,113,31,0.06), transparent),
+      #E8E2D0;
+    font-family:'IBM Plex Sans', sans-serif;
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:32px 12px;
+  }
+  body.lang-ar{ font-family:'IBM Plex Sans Arabic', sans-serif; }
+
+  .phone{ width:100%; max-width:380px; }
+
+  .receipt{
+    background:var(--paper);
+    position:relative;
+    padding:28px 20px 40px;
+    box-shadow:0 16px 36px rgba(33,29,24,0.20);
+    background-image:repeating-linear-gradient(transparent, transparent 27px, rgba(33,29,24,0.035) 28px);
+    animation:printIn .6s cubic-bezier(.22,.68,.35,1) both;
+    transform-origin:top center;
+  }
+
+  @keyframes printIn{
+    0%{ clip-path:inset(0 0 100% 0); opacity:0.4; transform:translateY(-6px); }
+    100%{ clip-path:inset(0 0 0% 0); opacity:1; transform:translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .receipt{ animation:none; }
+  }
+
+  .perf-top, .perf-bottom{
+    position:absolute; left:0; right:0; height:12px;
+    background:radial-gradient(circle at 10px 6px, #E8E2D0 6px, transparent 7px) repeat-x;
+    background-size:20px 12px;
+  }
+  .perf-top{ top:-1px; }
+  .perf-bottom{ bottom:-1px; transform:rotate(180deg); }
+
+  .top-row{ display:flex; justify-content:flex-end; }
+  .gear-btn{
+    background:none; border:none; cursor:pointer;
+    color:var(--ink-soft); padding:6px; display:flex;
+    border-radius:50%;
+    transition:transform .2s ease, color .15s ease, background .15s ease;
+  }
+  .gear-btn:hover{ color:var(--ink); transform:rotate(25deg); background:rgba(33,29,24,0.06); }
+  .gear-btn:active{ background:rgba(33,29,24,0.1); }
+  .gear-btn svg{ width:19px; height:19px; }
+
+  .brand{ text-align:center; margin-top:-6px; margin-bottom:4px; }
+  .brand-mark{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:27px; letter-spacing:1px; }
+  .brand-mark .fresh-part{ color:var(--green); }
+  .brand-sub{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); letter-spacing:1px; margin-top:2px; }
+
+  .divider{ border:none; border-top:1.5px dashed var(--line); margin:16px 0; }
+
+  .meta-row{
+    display:flex; justify-content:space-between;
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
+  }
+
+  .fresh-bar{
+    display:flex;
+    height:6px;
+    border-radius:4px;
+    overflow:hidden;
+    margin-top:10px;
+    background:var(--line);
+  }
+  .fresh-bar span{
+    height:100%;
+    transition:width .5s cubic-bezier(.22,.68,.35,1);
+  }
+  .fresh-bar .seg-urgent{ background:var(--red); }
+  .fresh-bar .seg-soon{ background:var(--amber); }
+  .fresh-bar .seg-fresh{ background:var(--green); }
+
+  .scan-btn{
+    width:100%; margin-top:18px; padding:16px;
+    background:linear-gradient(165deg, #2b2620, var(--ink));
+    color:var(--paper);
+    border:none; border-radius:2px;
+    font-family:inherit; font-weight:600; font-size:15px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    box-shadow:0 6px 16px rgba(33,29,24,0.28);
+    transition:transform .12s ease, background .12s ease, box-shadow .12s ease;
+  }
+  .scan-btn:active{ transform:scale(0.97); background:#3a352c; box-shadow:0 3px 8px rgba(33,29,24,0.24); }
+  .scan-btn:disabled{ opacity:.55; cursor:default; transform:none; box-shadow:none; }
+  .scan-btn svg{ width:18px; height:18px; flex-shrink:0; }
+  .scan-btn.secondary{
+    background:none; color:var(--ink); border:1px solid var(--line); margin-top:10px;
+  }
+
+  #fileInput{ display:none; }
+
+  /* Preview / processing */
+  .preview-wrap{
+    margin-top:16px;
+    border-radius:6px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    position:relative;
+  }
+  .preview-wrap img{
+    width:100%; display:block; max-height:200px; object-fit:cover; filter:saturate(0.9);
+  }
+  .scan-line{
+    position:absolute; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, transparent, var(--green), transparent);
+    animation:scanMove 1.6s ease-in-out infinite;
+  }
+  @keyframes scanMove{
+    0%{ top:0%; } 50%{ top:96%; } 100%{ top:0%; }
+  }
+  .processing-label{
+    text-align:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-top:10px;
+    letter-spacing:.5px;
+  }
+  .progress-track{
+    height:3px; background:var(--line); border-radius:2px; margin-top:8px; overflow:hidden;
+  }
+  .progress-fill{
+    height:100%; background:var(--green); width:0%; transition:width .25s ease;
+  }
+
+  .items{ margin-top:18px; }
+
+  .group-header{
+    display:flex; align-items:center; gap:7px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:.4px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    padding:14px 0 6px;
+  }
+  .group-header:first-child{ padding-top:0; }
+  .group-icon{
+    font-size:12px;
+    width:20px; height:20px;
+    border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .group-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .group-dot.urgent{ background:var(--red); }
+  .urgent-header{ color:var(--red); }
+
+  .item{
+    display:flex; align-items:center; gap:10px; padding:12px 0;
+    border-bottom:1px dotted var(--line);
+    opacity:0; transform:translateY(6px);
+    animation:riseIn .35s ease forwards;
+  }
+  .item:last-child{ border-bottom:none; }
+  @keyframes riseIn{ to{ opacity:1; transform:translateY(0); } }
+
+  .status-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .status-dot.fresh{ background:var(--green); }
+  .status-dot.soon{ background:var(--amber); }
+  .status-dot.urgent{ background:var(--red); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(178,58,46,0.35); }
+    50%{ box-shadow:0 0 0 5px rgba(178,58,46,0); }
+  }
+
+  .item-main{ flex:1; min-width:0; }
+  .item-name{ font-size:14.5px; font-weight:500; cursor:pointer; }
+  .item-sublabel{
+    font-size:10.5px; font-family:'IBM Plex Mono', monospace;
+    margin-top:1px; letter-spacing:.2px;
+  }
+  .item-sublabel.verified{ color:var(--green); }
+  .item-sublabel.estimated{ color:var(--ink-soft); }
+  .item-days{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600;
+    padding:3px 9px; border-radius:20px; white-space:nowrap;
+  }
+  .item-days.fresh{ background:var(--green-bg); color:var(--green); }
+  .item-days.soon{ background:var(--amber-bg); color:var(--amber); }
+  .item-days.urgent{ background:var(--red-bg); color:var(--red); }
+
+  .item-actions{ display:flex; gap:2px; flex-shrink:0; }
+  .item-action-btn{
+    background:none; border:none; cursor:pointer;
+    color:var(--ink-soft); font-size:15px; line-height:1;
+    width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s ease, color .15s ease;
+  }
+  .item-action-btn.used:hover{ color:var(--green); background:var(--green-bg); }
+  .item-action-btn.trash:hover{ color:var(--red); background:var(--red-bg); }
+
+  .recipe-btn{
+    width:100%; margin-top:12px; padding:10px;
+    background:var(--green-bg); color:var(--green);
+    border:1px dashed var(--green); border-radius:6px;
+    font-family:inherit; font-weight:600; font-size:13px;
+    cursor:pointer;
+  }
+  .recipe-btn:active{ transform:scale(0.98); }
+
+  .field-label{
+    display:block; font-size:12px; font-weight:600; color:var(--ink-soft);
+    margin:14px 0 5px;
+  }
+  .field-input{
+    width:100%; padding:11px; border:1px solid var(--line); border-radius:6px;
+    font-family:inherit; font-size:14.5px; background:var(--paper); color:var(--ink);
+  }
+  #recipeContent{ font-size:14px; line-height:1.7; }
+  #recipeContent h4{ font-size:15px; margin-bottom:6px; }
+  #recipeContent ul{ padding-inline-start:20px; margin-top:6px; }
+
+  .empty{ text-align:center; padding:36px 10px 10px; color:var(--ink-soft); font-size:13.5px; line-height:1.9; }
+  .empty-icon{
+    font-size:30px; margin-bottom:8px; display:block;
+    animation:gentleFloat 2.6s ease-in-out infinite;
+  }
+  @keyframes gentleFloat{
+    0%,100%{ transform:translateY(0); }
+    50%{ transform:translateY(-4px); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .empty-icon{ animation:none; }
+  }
+
+  .no-match{
+    text-align:center; padding:16px 6px 4px; color:var(--ink-soft); font-size:12.5px; line-height:1.8;
+  }
+
+  .footer-note{
+    text-align:center; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+    color:var(--ink-soft); margin-top:22px; letter-spacing:0.5px;
+  }
+
+  .toast{
+    position:fixed; bottom:24px; left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper);
+    padding:10px 18px; border-radius:24px; font-size:13px;
+    opacity:0; transition:all .3s ease; pointer-events:none; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(33,29,24,0.45);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+    display:flex; align-items:flex-end; justify-content:center; z-index:10;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+
+  .sheet{
+    background:var(--paper); width:100%; max-width:380px;
+    border-radius:16px 16px 0 0; padding:22px 20px 28px;
+    transform:translateY(100%); transition:transform .25s ease;
+    max-height:85vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  }
+  .overlay.show .sheet{ transform:translateY(0); }
+
+  .sheet-title{ font-weight:700; font-size:16px; margin-bottom:14px; }
+  .lang-option{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 4px; border-bottom:1px solid var(--line); cursor:pointer; font-size:14.5px;
+  }
+  .lang-option:last-of-type{ border-bottom:none; }
+  .lang-option .check{
+    width:18px; height:18px; border-radius:50%; border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .lang-option.active .check{ border-color:var(--green); background:var(--green); }
+  .lang-option.active .check::after{ content:'✓'; color:#fff; font-size:11px; font-weight:700; }
+
+  .close-sheet{
+    width:100%; margin-top:16px; padding:12px; background:none;
+    border:1px solid var(--line); border-radius:2px; font-family:inherit;
+    font-size:13.5px; color:var(--ink-soft); cursor:pointer;
+  }
+
+  .onboard-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--line);
+    transition:background .2s ease, transform .2s ease;
+  }
+  .onboard-dot.active{ background:var(--green); transform:scale(1.2); }
+  .onboard-icon{ font-size:44px; margin-bottom:14px; }
+  .onboard-title{ font-size:17px; font-weight:700; margin-bottom:8px; }
+  .onboard-text{ font-size:13.5px; color:var(--ink-soft); line-height:1.7; }
+</style>
+</head>
+<body id="body">
+
+<div class="overlay" id="onboardOverlay" onclick="if(event.target===this) return;">
+  <div class="sheet" style="text-align:center;">
+    <div id="onboardStepContent"></div>
+    <div style="display:flex; justify-content:center; gap:6px; margin:16px 0;">
+      <span class="onboard-dot" id="dot0"></span>
+      <span class="onboard-dot" id="dot1"></span>
+      <span class="onboard-dot" id="dot2"></span>
+    </div>
+    <button class="scan-btn" style="margin-top:0;" onclick="onboardNext()" id="onboardBtn"></button>
+  </div>
+</div>
+
+<div class="phone">
+  <div class="receipt">
+    <div class="perf-top"></div>
+
+    <div class="top-row">
+      <button class="gear-btn" onclick="openSettings()" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="brand">
+      <div class="brand-mark" data-t="brandMark"><span class="fresh-part">Fresh</span>Track</div>
+      <div class="brand-sub" data-t="brandSub">EXPIRY TRACKER</div>
+    </div>
+
+    <div class="meta-row">
+      <span id="todayDate"></span>
+      <span id="itemCount">0 <span data-t="items">items</span></span>
+    </div>
+
+    <div id="freshBar" class="fresh-bar"></div>
+    <div id="freshCounts" style="font-size:11px; font-family:'IBM Plex Mono', monospace; margin-top:6px;"></div>
+    <button id="recipeBtn" class="recipe-btn" onclick="requestRecipe()" style="display:none;">
+      <span data-t="suggestRecipe">💡 Suggest a recipe</span>
+    </button>
+
+    <hr class="divider">
+
+    <button class="scan-btn" id="scanBtn" onclick="triggerFilePicker()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/>
+        <line x1="7" y1="12" x2="17" y2="12"/>
+      </svg>
+      <span data-t="scanBtn">Scan Receipt</span>
+    </button>
+    <button class="scan-btn secondary" id="manualAddBtn" onclick="openItemEditor(null)" data-t="addManually">Add Manually</button>
+    <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)">
+
+    <div id="previewWrap"></div>
+    <div id="processingWrap"></div>
+
+    <div id="recipeWrap"></div>
+
+    <div class="items" id="itemsList">
+      <div class="empty" id="emptyState">
+        <span class="empty-icon">🧾</span>
+        <span data-t="emptyText">Take a photo of your receipt and we'll sort every item by how soon it expires</span>
+      </div>
+    </div>
+
+    <div class="perf-bottom"></div>
+  </div>
+
+  </div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this) closeSettings()">
+  <div class="sheet">
+    <div class="sheet-title" data-t="accountTitle">Account & Sync</div>
+    <div id="accountBox"></div>
+
+    <div class="sheet-title" data-t="settingsTitle" style="margin-top:22px;">Language</div>
+    <div id="langList"></div>
+
+    <div class="sheet-title" data-t="notifTitle" style="margin-top:22px;">Notifications</div>
+    <div id="notifStatus" style="font-size:13px; color:var(--ink-soft); margin-bottom:6px;"></div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px; opacity:0.8;" data-t="notifCaveat">Checked when you open the app — not a background push while it's fully closed.</div>
+    <button class="scan-btn secondary" id="notifBtn" onclick="handleNotifToggle()" style="margin-top:0;"></button>
+
+    <div class="sheet-title" data-t="backupTitle" style="margin-top:22px;">Backup</div>
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;" data-t="backupNote">Export your items to a file, or import one on another device — no account needed.</div>
+    <div style="display:flex; gap:8px;">
+      <button class="scan-btn secondary" style="margin-top:0;" onclick="exportBackup()" data-t="exportBtn">Export</button>
+      <button class="scan-btn secondary" style="margin-top:0;" onclick="document.getElementById('importFile').click()" data-t="importBtn">Import</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none;" onchange="importBackup(event)">
+
+    <div class="sheet-title" data-t="statsTitle" style="margin-top:22px;">This month</div>
+    <div id="statsBox" style="font-size:13px; color:var(--ink-soft);"></div>
+
+    <div style="margin-top:22px; text-decoration:underline; cursor:pointer; font-size:11px; color:var(--ink-soft);" onclick="toggleRawText()">Diagnostics</div>
+    <pre id="rawTextBox" style="display:none; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:10px; margin-top:8px; font-size:10px; font-family:'IBM Plex Mono',monospace; white-space:pre-wrap; word-break:break-word; max-height:120px; overflow:auto; direction:ltr; text-align:left;"></pre>
+
+    <button class="close-sheet" onclick="closeSettings()" data-t="doneBtn">Done</button>
+  </div>
+</div>
+
+<div class="overlay" id="editorOverlay" onclick="if(event.target===this) closeItemEditor()">
+  <div class="sheet">
+    <div class="sheet-title" id="editorTitle" data-t="addItemTitle">Add Item</div>
+
+    <label class="field-label" data-t="fieldName">Name</label>
+    <input type="text" id="editName" class="field-input" placeholder="e.g. Milk">
+
+    <label class="field-label" data-t="fieldCategory">Category</label>
+    <select id="editCategory" class="field-input"></select>
+
+    <label class="field-label" data-t="fieldExpiry">Expiry date</label>
+    <input type="date" id="editDate" class="field-input">
+
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <button class="scan-btn secondary" style="margin-top:0; flex:1;" onclick="closeItemEditor()" data-t="cancelBtn">Cancel</button>
+      <button class="scan-btn" style="margin-top:0; flex:1;" onclick="saveItemEditor()" data-t="saveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="recipeOverlay" onclick="if(event.target===this) closeRecipeModal()">
+  <div class="sheet">
+    <div class="sheet-title" data-t="recipeTitle">Recipe Idea</div>
+    <div id="recipeContent"></div>
+    <button class="close-sheet" onclick="closeRecipeModal()" data-t="doneBtn">Done</button>
+  </div>
+</div>
+
+<script>
+const translations = {
+  en: {
+    dir:'ltr', brandMark:'FreshTrack', brandSub:'EXPIRY TRACKER', items:'items',
+    scanBtn:'Scan Item', scanAnother:'Scan Another',
+    emptyText:"Take a photo of a product or receipt — AI will identify each item and its expiry",
+    settingsTitle:'Language', doneBtn:'Done',
+    processing:'Analyzing photo with AI…',
+    toastAdded:(n)=>`${n} items added automatically`,
+    noMatch:"AI couldn't recognize any grocery items in this photo. Try a clearer, well-lit shot.",
+    aiError:"Something went wrong analyzing the photo. Please try again.",
+    today:(d)=>d.toLocaleDateString('en-US',{day:'numeric',month:'short'}),
+    dayLabel:(days)=>{
+      if(days<0) return `Expired ${Math.abs(days)}d ago`;
+      if(days===0) return 'Expires today';
+      if(days===1) return '1 day left';
+      if(days<=10) return `${days} days left`;
+      return `${days} days`;
+    },
+    notifTitle:'Notifications',
+    notifEnable:'Enable Notifications',
+    notifOn:'On — you\'ll get a reminder when items are expiring soon',
+    notifDenied:'Notifications blocked — enable them in your browser/phone settings',
+    notifUnsupported:'Notifications aren\'t supported on this browser',
+    notifCaveat:'Checked when you open the app — not a background push while it\'s fully closed.',
+    notifBody:(n)=>`${n} item${n>1?'s':''} expiring soon — check FreshTrack`,
+    itemRemoved:'Item removed',
+    clearAll:'Clear all',
+    addManually:'Add Manually',
+    suggestRecipe:'💡 Suggest a recipe',
+    backupTitle:'Backup',
+    backupNote:'Export your items to a file, or import one on another device — no account needed.',
+    exportBtn:'Export',
+    importBtn:'Import',
+    statsTitle:'This month',
+    statsUsed:'Items used ✓',
+    statsWasted:'Items wasted 🗑',
+    addItemTitle:'Add Item',
+    editItemTitle:'Edit Item',
+    fieldName:'Name',
+    fieldCategory:'Category',
+    fieldExpiry:'Expiry date',
+    cancelBtn:'Cancel',
+    saveBtn:'Save',
+    recipeTitle:'Recipe Idea',
+    itemUsed:'Nice — marked as used',
+    itemWasted:'Marked as wasted',
+    importSuccess:(n)=>`Imported ${n} items`,
+    importError:'Could not read that backup file',
+    dailyLimitReached:'Daily limit reached — try again tomorrow',
+    onboardSteps:[
+      { icon:'📸', title:'Snap a photo', text:'Scan a receipt or a single product — AI reads the item and its expiry date automatically.' },
+      { icon:'🚦', title:'Color-coded urgency', text:'Red means eat it now, orange means soon, green means you have time. Sorted for you automatically.' },
+      { icon:'✓', title:'Mark it used or wasted', text:'Tap ✓ when you use something, 🗑 if it went bad — that\'s how your monthly stats build up.' },
+    ],
+    onboardNext:'Next',
+    onboardStart:'Get Started',
+    accountTitle:'Account & Sync',
+    cloudNotConfigured:'Cloud sync isn\'t set up for this deployment yet — items stay on this device only.',
+    signedInAs:'Signed in as',
+    signOut:'Sign Out',
+    signInNote:'Sign in to sync items across devices and enable real push notifications.',
+    sendCode:'Send Code',
+    codeSent:'Check your email for a 6-digit code.',
+    verifyCode:'Verify Code',
+    codeError:'Invalid or expired code — try sending a new one.',
+    linkError:'Could not send the code — try again.',
+    verifiedLabel:'Verified',
+    estimatedLabel:'Estimated',
+    countExpiring:'expiring soon',
+    countSoon:'use this week',
+    countFresh:'fresh'
+  },
+  ar: {
+    dir:'rtl', brandMark:'FreshTrack', brandSub:'تتبع الصلاحية', items:'غرض',
+    scanBtn:'امسح غرض', scanAnother:'مسح غرض آخر',
+    emptyText:'صور منتج أو إيصال — الذكاء الاصطناعي بيتعرف على كل غرض وتاريخ صلاحيته',
+    settingsTitle:'اللغة', doneBtn:'تم',
+    processing:'جاري تحليل الصورة بالذكاء الاصطناعي…',
+    toastAdded:(n)=>`تمت إضافة ${n} أغراض تلقائيًا`,
+    noMatch:'ما قدر الذكاء الاصطناعي يتعرف على أغراض بهذي الصورة. جرّب صورة أوضح بإضاءة أفضل.',
+    aiError:'صار خلل أثناء تحليل الصورة. حاول مرة ثانية.',
+    today:(d)=>d.toLocaleDateString('ar-SA',{day:'numeric',month:'short'}),
+    dayLabel:(days)=>{
+      if(days<0) return `منتهي من ${Math.abs(days)} يوم`;
+      if(days===0) return 'ينتهي اليوم';
+      if(days===1) return 'باقي يوم';
+      if(days<=10) return `باقي ${days} أيام`;
+      return `${days} يوم`;
+    },
+    notifTitle:'التنبيهات',
+    notifEnable:'فعّل التنبيهات',
+    notifOn:'مفعّلة — بترسل لك تذكير لما تقترب أغراضك من الانتهاء',
+    notifDenied:'التنبيهات محظورة — فعّلها من إعدادات المتصفح/الجوال',
+    notifUnsupported:'التنبيهات مو مدعومة بهذا المتصفح',
+    notifCaveat:'يتفحّص لما تفتح التطبيق — مو تنبيه خلفية حقيقي والتطبيق مقفول تمامًا.',
+    notifBody:(n)=>`${n} غرض قريب من الانتهاء — افتح FreshTrack`,
+    itemRemoved:'تم حذف الغرض',
+    clearAll:'حذف الكل',
+    addManually:'إضافة يدوية',
+    suggestRecipe:'💡 اقترح وصفة',
+    backupTitle:'نسخة احتياطية',
+    backupNote:'صدّر أغراضك لملف، أو استورد ملف من جهاز ثاني — بدون حساب.',
+    exportBtn:'تصدير',
+    importBtn:'استيراد',
+    statsTitle:'هذا الشهر',
+    statsUsed:'أغراض استخدمتها ✓',
+    statsWasted:'أغراض تلفت 🗑',
+    addItemTitle:'إضافة غرض',
+    editItemTitle:'تعديل الغرض',
+    fieldName:'الاسم',
+    fieldCategory:'الفئة',
+    fieldExpiry:'تاريخ الانتهاء',
+    cancelBtn:'إلغاء',
+    saveBtn:'حفظ',
+    recipeTitle:'فكرة وصفة',
+    itemUsed:'تمام — تم تعليمه كمُستخدم',
+    itemWasted:'تم تعليمه كتالف',
+    importSuccess:(n)=>`تم استيراد ${n} أغراض`,
+    importError:'ما قدرنا نقرأ ملف النسخة الاحتياطية',
+    dailyLimitReached:'وصلت الحد اليومي — جرب مرة ثانية بكرة',
+    onboardSteps:[
+      { icon:'📸', title:'صوّر أي غرض', text:'صور إيصال أو منتج مفرد — الذكاء الاصطناعي يتعرف على الغرض وتاريخ صلاحيته تلقائيًا.' },
+      { icon:'🚦', title:'ألوان توضح الأولوية', text:'أحمر يعني كله الحين، برتقالي يعني قريب، أخضر يعني عندك وقت. مرتبة لك تلقائيًا.' },
+      { icon:'✓', title:'علّمه استخدمته أو تلف', text:'اضغط ✓ لما تستخدم شي، 🗑 لو تلف — كذا تتكون إحصائيتك الشهرية.' },
+    ],
+    onboardNext:'التالي',
+    onboardStart:'ابدأ',
+    accountTitle:'الحساب والمزامنة',
+    cloudNotConfigured:'المزامنة السحابية مو مفعّلة بهذه النسخة الحين — أغراضك تبقى بجهازك بس.',
+    signedInAs:'سجّلت دخول كـ',
+    signOut:'تسجيل خروج',
+    signInNote:'سجّل دخول عشان تزامن أغراضك بين أجهزتك وتفعّل تنبيهات حقيقية.',
+    sendCode:'أرسل الرمز',
+    codeSent:'شيك على إيميلك على رمز مكوّن من 6 أرقام.',
+    verifyCode:'تحقق من الرمز',
+    codeError:'الرمز غلط أو انتهت صلاحيته — أرسل رمز جديد.',
+    linkError:'ما قدرنا نرسل الرمز — حاول مرة ثانية.',
+    verifiedLabel:'مؤكد',
+    estimatedLabel:'تقدير',
+    countExpiring:'قرب الانتهاء',
+    countSoon:'استخدمه هالأسبوع',
+    countFresh:'طازج'
+  },
+  es: {
+    dir:'ltr', brandMark:'FreshTrack', brandSub:'RASTREADOR DE CADUCIDAD', items:'artículos',
+    scanBtn:'Escanear artículo', scanAnother:'Escanear otro',
+    emptyText:'Toma una foto de un producto o recibo — la IA identificará cada artículo y su caducidad',
+    settingsTitle:'Idioma', doneBtn:'Listo',
+    processing:'Analizando foto con IA…',
+    toastAdded:(n)=>`${n} artículos añadidos automáticamente`,
+    noMatch:'La IA no pudo reconocer productos en esta foto. Prueba con una imagen más clara y bien iluminada.',
+    aiError:'Algo salió mal al analizar la foto. Inténtalo de nuevo.',
+    today:(d)=>d.toLocaleDateString('es-ES',{day:'numeric',month:'short'}),
+    dayLabel:(days)=>{
+      if(days<0) return `Caducó hace ${Math.abs(days)}d`;
+      if(days===0) return 'Caduca hoy';
+      if(days===1) return 'Queda 1 día';
+      if(days<=10) return `Quedan ${days} días`;
+      return `${days} días`;
+    },
+    notifTitle:'Notificaciones',
+    notifEnable:'Activar notificaciones',
+    notifOn:'Activadas — recibirás un aviso cuando algo esté por caducar',
+    notifDenied:'Notificaciones bloqueadas — actívalas en la configuración de tu navegador/teléfono',
+    notifUnsupported:'Este navegador no admite notificaciones',
+    notifCaveat:'Se revisa cuando abres la app — no es una notificación en segundo plano si está completamente cerrada.',
+    notifBody:(n)=>`${n} artículo${n>1?'s':''} por caducar — revisa FreshTrack`,
+    itemRemoved:'Artículo eliminado',
+    clearAll:'Eliminar todo',
+    addManually:'Añadir manualmente',
+    suggestRecipe:'💡 Sugerir una receta',
+    backupTitle:'Copia de seguridad',
+    backupNote:'Exporta tus artículos a un archivo, o impórtalo en otro dispositivo — sin cuenta.',
+    exportBtn:'Exportar',
+    importBtn:'Importar',
+    statsTitle:'Este mes',
+    statsUsed:'Artículos usados ✓',
+    statsWasted:'Artículos desechados 🗑',
+    addItemTitle:'Añadir artículo',
+    editItemTitle:'Editar artículo',
+    fieldName:'Nombre',
+    fieldCategory:'Categoría',
+    fieldExpiry:'Fecha de caducidad',
+    cancelBtn:'Cancelar',
+    saveBtn:'Guardar',
+    recipeTitle:'Idea de receta',
+    itemUsed:'Genial — marcado como usado',
+    itemWasted:'Marcado como desechado',
+    importSuccess:(n)=>`${n} artículos importados`,
+    importError:'No se pudo leer ese archivo de copia de seguridad',
+    dailyLimitReached:'Límite diario alcanzado — inténtalo mañana',
+    onboardSteps:[
+      { icon:'📸', title:'Toma una foto', text:'Escanea un recibo o un solo producto — la IA lee el artículo y su fecha de caducidad automáticamente.' },
+      { icon:'🚦', title:'Urgencia por colores', text:'Rojo significa cómelo ya, naranja pronto, verde tienes tiempo. Todo ordenado automáticamente.' },
+      { icon:'✓', title:'Marca usado o desechado', text:'Toca ✓ cuando uses algo, 🗑 si se echó a perder — así se construyen tus estadísticas mensuales.' },
+    ],
+    onboardNext:'Siguiente',
+    onboardStart:'Empezar',
+    accountTitle:'Cuenta y sincronización',
+    cloudNotConfigured:'La sincronización en la nube no está configurada aún — los artículos se quedan solo en este dispositivo.',
+    signedInAs:'Sesión iniciada como',
+    signOut:'Cerrar sesión',
+    signInNote:'Inicia sesión para sincronizar artículos entre dispositivos y activar notificaciones push reales.',
+    sendCode:'Enviar código',
+    codeSent:'Revisa tu correo para el código de 6 dígitos.',
+    verifyCode:'Verificar código',
+    codeError:'Código inválido o expirado — envía uno nuevo.',
+    linkError:'No se pudo enviar el código — inténtalo de nuevo.',
+    verifiedLabel:'Verificado',
+    estimatedLabel:'Estimado',
+    countExpiring:'por caducar',
+    countSoon:'usar esta semana',
+    countFresh:'frescos'
+  }
+};
+
+// =====================================================================
+// Cloud account, sync, and real push notifications (Supabase-powered)
+// =====================================================================
+// Fill these in after creating a free project at supabase.com — see
+// README.md "Cloud sync setup" for exact steps. Until filled in, the app
+// keeps working exactly as before using localStorage only (nothing breaks).
+const SUPABASE_URL = 'https://uzaaulmegdaheixsyxec.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6YWF1bG1lZ2RhaGVpeHN5eGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTk4OTgsImV4cCI6MjEwMzY5NTg5OH0.Y91E1C6z0fPGFqG17kUPwtkCN0EtATlpzraFlS72yYA';
+const VAPID_PUBLIC_KEY = 'BP2HLUTxAS9ddHUTU-nm6gm75vbEijdOX5MASmI7Z9Segy86KPDFEi7oKrk8S-SIiOP04-0FlyeCpEhNMqBBFaw';
+
+let sb = null;
+let currentUser = null;
+
+function cloudConfigured(){
+  return !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+}
+
+function initSupabase(){
+  if(!cloudConfigured()) return;
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange((event, session)=>{
+    currentUser = session ? session.user : null;
+    renderAccountBox();
+    if(currentUser && event === 'SIGNED_IN'){
+      migrateLocalItemsToCloud().then(loadItemsFromCloud);
+    }
+  });
+  sb.auth.getSession().then(({ data })=>{
+    currentUser = data.session ? data.session.user : null;
+    renderAccountBox();
+    if(currentUser) loadItemsFromCloud();
+  });
+}
+
+function renderAccountBox(){
+  const box = document.getElementById('accountBox');
+  if(!box) return;
+  const t = translations[currentLang];
+
+  if(!cloudConfigured()){
+    box.innerHTML = `<div style="font-size:12.5px; color:var(--ink-soft);">${t.cloudNotConfigured}</div>`;
+    return;
+  }
+
+  if(currentUser){
+    box.innerHTML = `
+      <div style="font-size:13px; color:var(--ink-soft); margin-bottom:8px;">${t.signedInAs} <strong style="color:var(--ink)">${currentUser.email}</strong></div>
+      <button class="scan-btn secondary" style="margin-top:0;" onclick="signOutCloud()">${t.signOut}</button>
+    `;
+  } else {
+    // A tappable link in an email always opens Safari on iOS, never the
+    // installed home-screen icon — and iOS keeps those two as separate
+    // storage contexts, so a session started in Safari never appears in the
+    // icon. A 6-digit code typed directly inside whichever context the
+    // person is already using sidesteps that entirely.
+    box.innerHTML = `
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:8px;">${t.signInNote}</div>
+      <input type="email" id="authEmail" class="field-input" placeholder="you@example.com" style="margin-bottom:8px;">
+      <button class="scan-btn secondary" style="margin-top:0;" onclick="sendOtpCode()">${t.sendCode}</button>
+      <div id="authStatus" style="font-size:12px; margin-top:6px;"></div>
+      <div id="otpStep" style="display:none; margin-top:10px;">
+        <input type="text" inputmode="numeric" maxlength="6" id="authCode" class="field-input" placeholder="123456" style="margin-bottom:8px; letter-spacing:4px; text-align:center; font-family:'IBM Plex Mono',monospace;">
+        <button class="scan-btn" style="margin-top:0;" onclick="verifyOtpCode()">${t.verifyCode}</button>
+      </div>
+    `;
+  }
+}
+
+async function sendOtpCode(){
+  const email = document.getElementById('authEmail').value.trim();
+  if(!email) return;
+  const t = translations[currentLang];
+  // No emailRedirectTo needed — we're not using the link, just the code
+  // that Supabase includes in the same email.
+  const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser: true } });
+  const statusEl = document.getElementById('authStatus');
+  if(error){
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `${t.linkError} (${error.message || error.status || 'unknown error'})`;
+  } else {
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = t.codeSent;
+    document.getElementById('otpStep').style.display = 'block';
+  }
+}
+
+async function verifyOtpCode(){
+  const email = document.getElementById('authEmail').value.trim();
+  const code = document.getElementById('authCode').value.trim();
+  if(!email || !code) return;
+  const t = translations[currentLang];
+  const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
+  const statusEl = document.getElementById('authStatus');
+  if(error){
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `${t.codeError} (${error.message || 'unknown error'})`;
+  }
+  // On success, onAuthStateChange fires automatically and re-renders the box.
+}
+
+async function signOutCloud(){
+  await sb.auth.signOut();
+  currentUser = null;
+  renderAccountBox();
+  loadItems(); // fall back to whatever's in local storage
+  render(currentItems.length === 0);
+}
+
+// One-time upload of whatever's currently in localStorage the first time
+// someone signs in, so they don't lose items they added before creating an account.
+async function migrateLocalItemsToCloud(){
+  if(!currentItems.length) return;
+  const rows = currentItems.map(it => ({
+    id: it.id, user_id: currentUser.id, name: it.name,
+    category: it.category, expiry_date: it.expiryDate, from_label: !!it.fromLabel,
+  }));
+  await sb.from('items').upsert(rows);
+}
+
+async function loadItemsFromCloud(){
+  const { data, error } = await sb.from('items').select('*').order('expiry_date');
+  if(error){ console.warn('Cloud load failed:', error); return; }
+  currentItems = (data || []).map(row => ({
+    id: row.id, name: row.name, category: row.category,
+    expiryDate: row.expiry_date, fromLabel: row.from_label,
+  }));
+  render(currentItems.length === 0);
+  maybeNotifyUrgentItems();
+}
+
+// Called after every local add/edit/remove — mirrors the change to the cloud
+// when signed in, no-ops silently when not (pure localStorage mode).
+async function syncItemToCloud(item){
+  if(!currentUser) return;
+  await sb.from('items').upsert({
+    id: item.id, user_id: currentUser.id, name: item.name,
+    category: item.category, expiry_date: item.expiryDate, from_label: !!item.fromLabel,
+  });
+}
+
+async function deleteItemFromCloud(id){
+  if(!currentUser) return;
+  await sb.from('items').delete().eq('id', id);
+}
+
+// --- Real push subscription (works even when the app is fully closed) ---
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribeToPush(){
+  if(!currentUser || !cloudConfigured()) return; // push storage needs the cloud account
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub){
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  await sb.from('push_subscriptions').upsert({
+    user_id: currentUser.id,
+    subscription: sub.toJSON(),
+  });
+}
+
+const langNames = { en:'English', ar:'العربية', es:'Español' };
+let currentLang = 'en';
+let currentItems = [];
+
+// Category metadata for grouping items in the UI. The AI vision call below
+// returns a category per item directly, so we no longer need a keyword dictionary.
+const categoryMeta = {
+  dairy:   { icon:'🥛', bg:'var(--blue-bg)', name:{en:'Dairy & Eggs', ar:'ألبان وبيض', es:'Lácteos y huevos'} },
+  meat:    { icon:'🍗', bg:'var(--rose-bg)', name:{en:'Meat & Seafood', ar:'لحوم ومأكولات بحرية', es:'Carnes y mariscos'} },
+  produce: { icon:'🥦', bg:'var(--green-bg)', name:{en:'Fruits & Vegetables', ar:'خضار وفواكه', es:'Frutas y verduras'} },
+  bakery:  { icon:'🍞', bg:'var(--amber-bg)', name:{en:'Bakery', ar:'مخبوزات', es:'Panadería'} },
+  pantry:  { icon:'🥫', bg:'var(--tan-bg)', name:{en:'Pantry', ar:'مواد غذائية جافة', es:'Despensa'} },
+};
+
+const urgentLabel = { en:'Needs attention', ar:'يحتاج انتباه الآن', es:'Necesita atención' };
+
+function statusFor(days){
+  if(days <= 1) return 'urgent';
+  if(days <= 3) return 'soon';
+  return 'fresh';
+}
+
+function applyLang(lang){
+  currentLang = lang;
+  const t = translations[lang];
+  document.getElementById('htmlRoot').setAttribute('lang', lang);
+  document.getElementById('htmlRoot').setAttribute('dir', t.dir);
+  document.body.classList.toggle('lang-ar', lang === 'ar');
+
+  document.querySelectorAll('[data-t]').forEach(el=>{
+    const key = el.getAttribute('data-t');
+    if(key === 'brandMark') return; // two-tone markup lives directly in HTML, name stays constant across languages
+    if(typeof t[key] === 'string') el.textContent = t[key];
+  });
+
+  document.getElementById('todayDate').textContent = t.today(new Date());
+  buildLangList();
+  updateNotifUI();
+  updateStatsUI();
+  if(document.getElementById('onboardOverlay').classList.contains('show')) renderOnboardStep();
+  renderAccountBox();
+  render();
+}
+
+function buildLangList(){
+  const list = document.getElementById('langList');
+  list.innerHTML = Object.keys(translations).map(code => `
+    <div class="lang-option ${code===currentLang?'active':''}" onclick="applyLang('${code}')">
+      <span>${langNames[code]}</span>
+      <span class="check"></span>
+    </div>
+  `).join('');
+}
+
+function render(noMatchFound, customMessage){
+  const t = translations[currentLang];
+  const list = document.getElementById('itemsList');
+  const empty = document.getElementById('emptyState');
+  document.getElementById('itemCount').innerHTML = `${currentItems.length} <span data-t="items">${t.items}</span>`;
+  updateFreshBar();
+
+  const recipeBtn = document.getElementById('recipeBtn');
+  if(recipeBtn){
+    const hasUrgent = currentItems.some(it => daysUntil(it.expiryDate) <= 3);
+    recipeBtn.style.display = hasUrgent ? 'block' : 'none';
+  }
+
+  if(currentItems.length === 0){
+    list.innerHTML = '';
+    if(noMatchFound){
+      list.innerHTML = `<div class="no-match">${customMessage || t.noMatch}</div>`;
+    } else {
+      list.appendChild(empty);
+    }
+    return;
+  }
+
+  const urgent = currentItems.filter(it => daysUntil(it.expiryDate) <= 3).sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate));
+  const rest = currentItems.filter(it => daysUntil(it.expiryDate) > 3);
+
+  const byCategory = {};
+  rest.forEach(it=>{
+    const cat = it.category || 'pantry';
+    if(!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(it);
+  });
+  Object.values(byCategory).forEach(arr => arr.sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate)));
+
+  let html = '';
+
+  if(urgent.length){
+    html += `<div class="group-header urgent-header">
+      <span class="group-dot urgent"></span>
+      <span>${urgentLabel[currentLang]}</span>
+    </div>`;
+    html += urgent.map((it,i) => itemRow(it, t, i)).join('');
+  }
+
+  Object.keys(categoryMeta).forEach(catKey=>{
+    const items = byCategory[catKey];
+    if(!items || !items.length) return;
+    html += `<div class="group-header">
+      <span class="group-icon" style="background:${categoryMeta[catKey].bg}">${categoryMeta[catKey].icon}</span>
+      <span>${categoryMeta[catKey].name[currentLang]}</span>
+    </div>`;
+    html += items.map((it,i) => itemRow(it, t, i)).join('');
+  });
+
+  list.innerHTML = html;
+}
+
+function updateFreshBar(){
+  const bar = document.getElementById('freshBar');
+  const counts = document.getElementById('freshCounts');
+  if(!bar) return;
+  if(currentItems.length === 0){
+    bar.innerHTML = ''; bar.style.visibility = 'hidden';
+    if(counts) counts.innerHTML = '';
+    return;
+  }
+  bar.style.visibility = 'visible';
+
+  let urgent=0, soon=0, fresh=0;
+  currentItems.forEach(it=>{
+    const d = daysUntil(it.expiryDate);
+    if(d <= 1) urgent++; else if(d <= 3) soon++; else fresh++;
+  });
+  const total = currentItems.length;
+  bar.innerHTML = `
+    <span class="seg-urgent" style="width:${urgent/total*100}%"></span>
+    <span class="seg-soon" style="width:${soon/total*100}%"></span>
+    <span class="seg-fresh" style="width:${fresh/total*100}%"></span>
+  `;
+
+  if(counts){
+    const t = translations[currentLang];
+    const parts = [];
+    if(urgent) parts.push(`<span style="color:var(--red)">🔴 ${urgent} ${t.countExpiring}</span>`);
+    if(soon) parts.push(`<span style="color:var(--amber)">🟠 ${soon} ${t.countSoon}</span>`);
+    if(fresh) parts.push(`<span style="color:var(--green)">🟢 ${fresh} ${t.countFresh}</span>`);
+    counts.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+  }
+}
+
+function daysUntil(expiryDate){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(expiryDate);
+  return Math.round((d - today) / (1000*60*60*24));
+}
+
+function itemRow(it, t, i){
+  const days = daysUntil(it.expiryDate);
+  const usedTitle = currentLang==='ar' ? 'استخدمته' : currentLang==='es' ? 'Usado' : 'Mark as used';
+  const trashTitle = currentLang==='ar' ? 'رميته (تلف)' : currentLang==='es' ? 'Desechado' : 'Mark as wasted';
+
+  // Explicit, always-visible distinction — not just a hover tooltip — between a
+  // date actually printed on packaging and a category-average guess. Someone
+  // deciding whether to eat something should never mistake one for the other.
+  const sublabel = it.fromLabel
+    ? `📅 ${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
+    : `≈ ${t.estimatedLabel}`;
+  const sublabelClass = it.fromLabel ? 'verified' : 'estimated';
+
+  return `
+    <div class="item" style="animation-delay:${i*0.04}s">
+      <div class="status-dot ${statusFor(days)}"></div>
+      <div class="item-main">
+        <div class="item-name" onclick="openItemEditor('${it.id}')">${it.name[currentLang]}</div>
+        <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
+      </div>
+      <div class="item-days ${statusFor(days)}">${it.fromLabel ? '' : '≈ '}${t.dayLabel(days)}</div>
+      <div class="item-actions">
+        <button class="item-action-btn used" onclick="resolveItem('${it.id}', 'used')" title="${usedTitle}" aria-label="used">✓</button>
+        <button class="item-action-btn trash" onclick="resolveItem('${it.id}', 'wasted')" title="${trashTitle}" aria-label="wasted">🗑</button>
+      </div>
+    </div>
+  `;
+}
+
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=> el.classList.remove('show'), 2400);
+}
+
+let lastRawText = '';
+
+// --- Daily usage caps ---
+// True abuse-proof rate limiting needs a server-side store (Redis/KV) to track
+// requests by IP across invocations — out of scope for a no-database backend.
+// This is the honest, achievable version: a soft per-device daily cap so one
+// browser tab can't accidentally burn through the free Gemini quota in a loop
+// (e.g. a bug, or someone holding the scan button). It won't stop a
+// determined attacker calling the API directly, only normal-use runaway calls.
+const SCAN_DAILY_LIMIT = 25;
+const RECIPE_DAILY_LIMIT = 10;
+
+function usageKey(kind){
+  return `freshtrack_usage_${kind}_${new Date().toDateString()}`;
+}
+
+function getUsageCount(kind){
+  return parseInt(localStorage.getItem(usageKey(kind)) || '0', 10);
+}
+
+function bumpUsage(kind){
+  localStorage.setItem(usageKey(kind), String(getUsageCount(kind) + 1));
+}
+
+function checkUsageLimit(kind, limit){
+  if(getUsageCount(kind) >= limit){
+    const t = translations[currentLang];
+    showToast(t.dailyLimitReached);
+    return false;
+  }
+  return true;
+}
+
+function triggerFilePicker(){
+  if(!checkUsageLimit('scan', SCAN_DAILY_LIMIT)) return;
+  document.getElementById('fileInput').click();
+}
+
+function handleFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  const t = translations[currentLang];
+  const url = URL.createObjectURL(file);
+
+  document.getElementById('previewWrap').innerHTML = `
+    <div class="preview-wrap">
+      <img src="${url}" alt="item preview">
+      <div class="scan-line"></div>
+    </div>
+  `;
+  document.getElementById('processingWrap').innerHTML = `
+    <div class="processing-label" id="procLabel">${t.processing}</div>
+  `;
+
+  const scanBtn = document.getElementById('scanBtn');
+  scanBtn.disabled = true;
+
+  runAIAnalysis(file);
+}
+
+// Resize + compress to a reasonable size before sending to the vision model —
+// keeps the request fast and well within payload limits.
+function fileToResizedBase64(file, maxDim = 1024, quality = 0.85){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      if(Math.max(w,h) > maxDim){
+        const scale = maxDim / Math.max(w,h);
+        w = Math.round(w*scale); h = Math.round(h*scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// The system prompt now lives server-side in /api/analyze.js — the browser
+// only sends the image and never talks to Anthropic (or holds any API key) directly.
+
+async function runAIAnalysis(file){
+  bumpUsage('scan');
+  try{
+    const base64 = await fileToResizedBase64(file);
+
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: base64 })
+    });
+
+    const data = await response.json();
+
+    if(!response.ok){
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+
+    const raw = data.text || '';
+    lastRawText = raw;
+
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    finishAIResult(parsed, false);
+  } catch(err){
+    console.error(err);
+    lastRawText = String(err);
+    finishAIResult(null, true);
+  }
+}
+
+function finishAIResult(result, hadError){
+  document.getElementById('previewWrap').innerHTML = '';
+  document.getElementById('processingWrap').innerHTML = '';
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('fileInput').value = '';
+
+  const t = translations[currentLang];
+  const items = (result && Array.isArray(result.items)) ? result.items : [];
+
+  if(hadError){
+    render(currentItems.length === 0, currentItems.length === 0 ? t.aiError : undefined);
+    showToast(t.aiError);
+    return;
+  }
+
+  if(items.length === 0){
+    render(currentItems.length === 0);
+    if(currentItems.length > 0) showToast(t.noMatch);
+    return;
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const newItems = items.map(it=>{
+    let expiryDate, fromLabel;
+    if(it.expiry_date){
+      const d = new Date(it.expiry_date);
+      if(!isNaN(d.getTime())){
+        expiryDate = d.toISOString();
+        fromLabel = true;
+      }
+    }
+    if(!expiryDate){
+      const days = typeof it.estimated_days === 'number' ? it.estimated_days : 5;
+      const d = new Date(today);
+      d.setDate(d.getDate() + days);
+      expiryDate = d.toISOString();
+      fromLabel = false;
+    }
+    const category = categoryMeta[it.category] ? it.category : 'pantry';
+    return {
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      name: it.name,
+      category,
+      expiryDate,
+      fromLabel,
+    };
+  });
+
+  // Scans accumulate into one running list (a fridge inventory), not replace it.
+  currentItems = [...currentItems, ...newItems];
+  saveItems();
+  newItems.forEach(syncItemToCloud);
+  render(false);
+  showToast(t.toastAdded(newItems.length));
+  maybeNotifyUrgentItems();
+}
+
+function resolveItem(id, outcome){
+  currentItems = currentItems.filter(it => it.id !== id);
+  saveItems();
+  deleteItemFromCloud(id);
+  bumpStat(outcome === 'used' ? 'usedCount' : 'wastedCount');
+  render(currentItems.length === 0);
+  showToast(translations[currentLang][outcome === 'used' ? 'itemUsed' : 'itemWasted']);
+  updateStatsUI();
+}
+
+// --- Stats: honest counts (used vs wasted), not a made-up currency estimate ---
+const STATS_KEY = 'freshtrack_stats_v1';
+
+function currentMonthKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}`;
+}
+
+function loadStats(){
+  try{
+    const raw = localStorage.getItem(STATS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if(parsed && parsed.month === currentMonthKey()) return parsed;
+  } catch(e){ /* fall through to fresh stats */ }
+  return { month: currentMonthKey(), usedCount: 0, wastedCount: 0 };
+}
+
+function bumpStat(key){
+  const stats = loadStats();
+  stats[key] = (stats[key] || 0) + 1;
+  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+}
+
+function updateStatsUI(){
+  const box = document.getElementById('statsBox');
+  if(!box) return;
+  const stats = loadStats();
+  const t = translations[currentLang];
+  box.innerHTML = `
+    <div style="display:flex; justify-content:space-between; padding:4px 0;">
+      <span>${t.statsUsed}</span><strong style="color:var(--green)">${stats.usedCount}</strong>
+    </div>
+    <div style="display:flex; justify-content:space-between; padding:4px 0;">
+      <span>${t.statsWasted}</span><strong style="color:var(--red)">${stats.wastedCount}</strong>
+    </div>
+  `;
+}
+
+// --- Manual add / edit item ---
+let editingItemId = null;
+
+function populateCategorySelect(){
+  const sel = document.getElementById('editCategory');
+  sel.innerHTML = Object.keys(categoryMeta).map(key =>
+    `<option value="${key}">${categoryMeta[key].icon} ${categoryMeta[key].name[currentLang]}</option>`
+  ).join('');
+}
+
+function openItemEditor(id){
+  editingItemId = id;
+  populateCategorySelect();
+  const t = translations[currentLang];
+  document.getElementById('editorTitle').textContent = id ? t.editItemTitle : t.addItemTitle;
+
+  if(id){
+    const it = currentItems.find(x => x.id === id);
+    if(!it) return;
+    document.getElementById('editName').value = it.name[currentLang] || it.name.en || '';
+    document.getElementById('editCategory').value = it.category;
+    document.getElementById('editDate').value = it.expiryDate.slice(0,10);
+  } else {
+    document.getElementById('editName').value = '';
+    document.getElementById('editCategory').value = 'pantry';
+    const d = new Date(); d.setDate(d.getDate() + 5);
+    document.getElementById('editDate').value = d.toISOString().slice(0,10);
+  }
+  document.getElementById('editorOverlay').classList.add('show');
+}
+
+function closeItemEditor(){
+  document.getElementById('editorOverlay').classList.remove('show');
+  editingItemId = null;
+}
+
+function saveItemEditor(){
+  const name = document.getElementById('editName').value.trim();
+  const category = document.getElementById('editCategory').value;
+  const dateVal = document.getElementById('editDate').value;
+  if(!name || !dateVal) return;
+
+  const expiryDate = new Date(dateVal + 'T00:00:00').toISOString();
+
+  let savedItem;
+  if(editingItemId){
+    const it = currentItems.find(x => x.id === editingItemId);
+    if(it){
+      // Editing overwrites the name only in the currently active language,
+      // keeping the other two languages from the original AI/manual entry untouched.
+      it.name = { ...it.name, [currentLang]: name };
+      it.category = category;
+      it.expiryDate = expiryDate;
+      it.fromLabel = true; // manually confirmed, treat as a real date
+      savedItem = it;
+    }
+  } else {
+    savedItem = {
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      name: { en: name, ar: name, es: name },
+      category,
+      expiryDate,
+      fromLabel: true,
+    };
+    currentItems.push(savedItem);
+  }
+
+  saveItems();
+  if(savedItem) syncItemToCloud(savedItem);
+  closeItemEditor();
+  render(currentItems.length === 0);
+  maybeNotifyUrgentItems();
+}
+
+// --- Backup: export/import a JSON file — a manual, no-account alternative to cloud sync ---
+function exportBackup(){
+  const payload = { items: currentItems, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `freshtrack-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!Array.isArray(parsed.items)) throw new Error('bad format');
+      currentItems = [...currentItems, ...parsed.items];
+      saveItems();
+      render(currentItems.length === 0);
+      showToast(translations[currentLang].importSuccess(parsed.items.length));
+    } catch(e){
+      showToast(translations[currentLang].importError);
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// --- Recipe suggestion for items expiring soon ---
+async function requestRecipe(){
+  const urgent = currentItems.filter(it => daysUntil(it.expiryDate) <= 3);
+  if(urgent.length === 0) return;
+  if(!checkUsageLimit('recipe', RECIPE_DAILY_LIMIT)) return;
+
+  const t = translations[currentLang];
+  bumpUsage('recipe');
+  document.getElementById('recipeOverlay').classList.add('show');
+  document.getElementById('recipeContent').innerHTML = `<div class="processing-label" style="text-align:left;">${t.processing}</div>`;
+
+  try{
+    const response = await fetch('/api/recipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: urgent.map(it => it.name.en),
+        language: currentLang,
+      }),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || 'request failed');
+
+    const cleaned = (data.text || '').replace(/```json|```/g, '').trim();
+    const recipe = JSON.parse(cleaned);
+
+    document.getElementById('recipeContent').innerHTML = `
+      <h4>${recipe.title || ''}</h4>
+      <ul>${(recipe.steps || []).map(s => `<li>${s}</li>`).join('')}</ul>
+    `;
+  } catch(err){
+    console.error(err);
+    document.getElementById('recipeContent').innerHTML = `<div class="no-match" style="padding:10px 0;">${t.aiError}</div>`;
+  }
+}
+
+function closeRecipeModal(){
+  document.getElementById('recipeOverlay').classList.remove('show');
+}
+
+// --- Persistent storage (localStorage) — items survive app close/reopen ---
+const STORAGE_KEY = 'freshtrack_items_v1';
+
+function saveItems(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentItems));
+  } catch(e){
+    console.warn('Could not save items:', e);
+  }
+}
+
+function loadItems(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(Array.isArray(parsed)) currentItems = parsed;
+  } catch(e){
+    console.warn('Could not load saved items:', e);
+  }
+}
+
+// --- Notifications ---
+// True background push (app fully closed) needs a push server + VAPID keys.
+// This is the simpler, no-backend version: check for urgent items whenever
+// the app is opened (or right after a scan) and notify at most once a day.
+const NOTIF_KEY = 'freshtrack_notif_enabled';
+const NOTIF_LAST_KEY = 'freshtrack_last_notif_date';
+
+function notifSupported(){
+  return 'Notification' in window;
+}
+
+function notifEnabled(){
+  return notifSupported() && Notification.permission === 'granted' && localStorage.getItem(NOTIF_KEY) === '1';
+}
+
+async function handleNotifToggle(){
+  const t = translations[currentLang];
+  if(!notifSupported()){
+    showToast(t.notifUnsupported);
+    return;
+  }
+  if(Notification.permission === 'denied'){
+    showToast(t.notifDenied);
+    return;
+  }
+  if(Notification.permission === 'granted'){
+    // Already granted — toggle our own on/off flag
+    const nowOn = localStorage.getItem(NOTIF_KEY) !== '1';
+    localStorage.setItem(NOTIF_KEY, nowOn ? '1' : '0');
+    updateNotifUI();
+    if(nowOn){
+      maybeNotifyUrgentItems(true);
+      subscribeToPush();
+    }
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted'){
+    localStorage.setItem(NOTIF_KEY, '1');
+    maybeNotifyUrgentItems(true);
+    subscribeToPush();
+  }
+  updateNotifUI();
+}
+
+function updateNotifUI(){
+  const t = translations[currentLang];
+  const statusEl = document.getElementById('notifStatus');
+  const btn = document.getElementById('notifBtn');
+  if(!statusEl || !btn) return;
+
+  if(!notifSupported()){
+    statusEl.textContent = t.notifUnsupported;
+    btn.textContent = t.notifEnable;
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  if(Notification.permission === 'denied'){
+    statusEl.textContent = t.notifDenied;
+    btn.textContent = t.notifEnable;
+  } else if(notifEnabled()){
+    statusEl.textContent = t.notifOn;
+    btn.textContent = '✓ ' + t.notifEnable;
+  } else {
+    statusEl.textContent = '';
+    btn.textContent = t.notifEnable;
+  }
+}
+
+function maybeNotifyUrgentItems(force){
+  if(!notifEnabled()) return;
+  const urgentCount = currentItems.filter(it => daysUntil(it.expiryDate) <= 3).length;
+  if(urgentCount === 0) return;
+
+  const todayStr = new Date().toDateString();
+  if(!force && localStorage.getItem(NOTIF_LAST_KEY) === todayStr) return;
+
+  const t = translations[currentLang];
+  try{
+    new Notification('FreshTrack', {
+      body: t.notifBody(urgentCount),
+      icon: 'icons/icon-192.png',
+    });
+    localStorage.setItem(NOTIF_LAST_KEY, todayStr);
+  } catch(e){
+    console.warn('Notification failed:', e);
+  }
+}
+
+function toggleRawText(){
+  const box = document.getElementById('rawTextBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  box.textContent = lastRawText.trim() || '(empty)';
+}
+
+function openSettings(){ document.getElementById('overlay').classList.add('show'); }
+function closeSettings(){ document.getElementById('overlay').classList.remove('show'); }
+
+// --- First-launch onboarding ---
+const ONBOARD_KEY = 'freshtrack_onboarded';
+let onboardStep = 0;
+
+function maybeShowOnboarding(){
+  if(localStorage.getItem(ONBOARD_KEY) === '1') return;
+  onboardStep = 0;
+  renderOnboardStep();
+  document.getElementById('onboardOverlay').classList.add('show');
+}
+
+function renderOnboardStep(){
+  const t = translations[currentLang];
+  const steps = t.onboardSteps;
+  const s = steps[onboardStep];
+  document.getElementById('onboardStepContent').innerHTML = `
+    <div class="onboard-icon">${s.icon}</div>
+    <div class="onboard-title">${s.title}</div>
+    <div class="onboard-text">${s.text}</div>
+  `;
+  for(let i=0;i<3;i++){
+    document.getElementById('dot'+i).classList.toggle('active', i === onboardStep);
+  }
+  document.getElementById('onboardBtn').textContent = onboardStep === steps.length-1 ? t.onboardStart : t.onboardNext;
+}
+
+function onboardNext(){
+  const t = translations[currentLang];
+  if(onboardStep < t.onboardSteps.length - 1){
+    onboardStep++;
+    renderOnboardStep();
+  } else {
+    localStorage.setItem(ONBOARD_KEY, '1');
+    document.getElementById('onboardOverlay').classList.remove('show');
+  }
+}
+
+loadItems();
+applyLang('en');
+initSupabase();
+maybeNotifyUrgentItems();
+maybeShowOnboarding();
+
+// Re-check whenever the person comes back to the tab/app (not just cold load) —
+// e.g. switching back from another app, or unlocking the phone with FreshTrack
+// already open in the background. Still not true background push (see Settings
+// note), but catches far more real "opening the app" moments than load-only.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible'){
+    maybeNotifyUrgentItems();
+  }
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(err=>{
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
