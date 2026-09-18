@@ -845,18 +845,29 @@ async function subscribeToPush(){
   if(!currentUser || !cloudConfigured()) return; // push storage needs the cloud account
   if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
-  const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if(!sub){
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    console.log('[subscribeToPush] service worker ready', reg);
+
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    console.log('[subscribeToPush] pushManager subscription obtained', sub.toJSON());
+
+    const { error } = await sb.from('push_subscriptions').upsert({
+      user_id: currentUser.id,
+      subscription: sub.toJSON(),
+    }, { onConflict: 'user_id,endpoint' });
+    if(error) throw error;
+    console.log('[subscribeToPush] subscription row saved to Supabase');
+  }catch(err){
+    console.error('[subscribeToPush] failed', err);
+    showToast('Push subscription failed: ' + err.message);
   }
-  await sb.from('push_subscriptions').upsert({
-    user_id: currentUser.id,
-    subscription: sub.toJSON(),
-  }, { onConflict: 'user_id,endpoint' });
 }
 
 const langNames = { en:'English', ar:'العربية', es:'Español' };
