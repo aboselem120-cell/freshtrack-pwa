@@ -749,7 +749,7 @@ function renderAccountBox(){
       <button class="scan-btn secondary" style="margin-top:0;" onclick="sendOtpCode()">${t.sendCode}</button>
       <div id="authStatus" style="font-size:12px; margin-top:6px;"></div>
       <div id="otpStep" style="display:none; margin-top:10px;">
-        <input type="text" inputmode="numeric" maxlength="6" id="authCode" class="field-input" placeholder="123456" style="margin-bottom:8px; letter-spacing:4px; text-align:center; font-family:'IBM Plex Mono',monospace;">
+        <input type="text" inputmode="numeric" maxlength="8" id="authCode" class="field-input" placeholder="12345678" style="margin-bottom:8px; letter-spacing:4px; text-align:center; font-family:'IBM Plex Mono',monospace;">
         <button class="scan-btn" style="margin-top:0;" onclick="verifyOtpCode()">${t.verifyCode}</button>
       </div>
     `;
