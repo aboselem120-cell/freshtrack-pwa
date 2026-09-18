@@ -1654,8 +1654,11 @@ document.addEventListener('visibilitychange', ()=>{
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('service-worker.js').catch(err=>{
+    navigator.serviceWorker.register('service-worker.js').then(()=>{
+      showToast('SW registered OK', 2000);
+    }).catch(err=>{
       console.warn('Service worker registration failed:', err);
+      showToast('SW registration FAILED: ' + err.message, 5000);
     });
   });
 }
