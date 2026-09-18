@@ -848,92 +848,29 @@ function urlBase64ToUint8Array(base64String){
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// TEMPORARY diagnostic toasts — one per step, so the flow can be traced on
-// iOS Safari where there's no way to open the browser console. Remove the
-// showToast()/_sleep() calls below once push subscriptions save reliably.
 async function subscribeToPush(){
-  showToast('Step 1: function started', 4000);
-  await _sleep(1500);
+  if(!currentUser || !cloudConfigured()) return; // push storage needs the cloud account
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
-  if(!currentUser){
-    showToast('Step 2 FAILED: no currentUser', 4000);
-    return;
-  }
-  if(!cloudConfigured()){
-    showToast('Step 2 FAILED: cloud not configured', 4000);
-    return;
-  }
-  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
-    showToast('Step 2 FAILED: push not supported on this browser', 4000);
-    return;
-  }
-  showToast('Step 2: checks passed', 4000);
-  await _sleep(1500);
-
-  // Dump every registration + controller status before waiting, to catch a
-  // duplicate/wrong-scope registration if one exists.
   try{
-    const allRegs = await navigator.serviceWorker.getRegistrations();
-    const scopes = allRegs.map(r => `${r.scope}(${r.active?.state ?? 'no-active'})`).join(', ') || 'none';
-    const hasController = !!navigator.serviceWorker.controller;
-    console.log(`[subscribeToPush] registrations: [${scopes}] controller=${hasController}`);
-    showToast(`Registrations: ${allRegs.length} [${scopes}], controller=${hasController}`, 4000);
-    await _sleep(1500);
-  }catch(err){
-    console.error('[subscribeToPush] getRegistrations() failed', err);
-  }
+    const reg = await navigator.serviceWorker.ready;
 
-  let reg;
-  try{
-    console.log('[subscribeToPush] about to await navigator.serviceWorker.ready');
-    showToast('About to check service worker...', 3000);
-    const SW_TIMEOUT = Symbol('sw-timeout');
-    const result = await Promise.race([
-      navigator.serviceWorker.ready,
-      _sleep(10000).then(()=> SW_TIMEOUT),
-    ]);
-    if(result === SW_TIMEOUT){
-      showToast('Service worker timeout: not ready after 10s', 5000);
-      return;
-    }
-    reg = result;
-  }catch(err){
-    console.error('[subscribeToPush] service worker not ready', err);
-    showToast('Step 3 FAILED: ' + err.message, 4000);
-    return;
-  }
-  showToast('Step 3: service worker ready (state=' + (reg.active?.state ?? 'unknown') + ')', 4000);
-  await _sleep(1500);
-
-  let sub;
-  try{
-    sub = await reg.pushManager.getSubscription();
+    let sub = await reg.pushManager.getSubscription();
     if(!sub){
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
-  }catch(err){
-    console.error('[subscribeToPush] pushManager.subscribe failed', err);
-    showToast('Step 4 FAILED: ' + err.message, 4000);
-    return;
-  }
-  showToast('Step 4: subscription obtained', 4000);
-  await _sleep(1500);
 
-  try{
     const { error } = await sb.from('push_subscriptions').upsert({
       user_id: currentUser.id,
       subscription: sub.toJSON(),
     }, { onConflict: 'user_id,endpoint' });
     if(error) throw error;
-    showToast('Step 5: saved', 4000);
   }catch(err){
-    console.error('[subscribeToPush] Supabase upsert failed', err);
-    showToast('Step 5 FAILED: ' + err.message, 4000);
+    console.error('[subscribeToPush] failed', err);
+    showToast('Push subscription failed: ' + err.message);
   }
 }
 
@@ -1667,11 +1604,8 @@ document.addEventListener('visibilitychange', ()=>{
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('service-worker.js').then(()=>{
-      showToast('SW registered OK', 2000);
-    }).catch(err=>{
+    navigator.serviceWorker.register('service-worker.js').catch(err=>{
       console.warn('Service worker registration failed:', err);
-      showToast('SW registration FAILED: ' + err.message, 5000);
     });
   });
 }
