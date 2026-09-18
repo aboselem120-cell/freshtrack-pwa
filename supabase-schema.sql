@@ -39,9 +39,20 @@ create policy "Users manage their own push subscriptions"
 
 -- Migration for a database created before the `endpoint` column existed:
 -- run this block instead of the `create table` above if push_subscriptions
--- already exists. Fails if duplicate endpoints are already present — delete
--- the older duplicate rows first in that case.
+-- already exists.
+--
+-- Step 1 — add the derived column (safe to run even with existing rows):
 -- alter table push_subscriptions add column endpoint text generated always as (subscription->>'endpoint') stored;
+--
+-- Step 2 — remove duplicate rows that share the same endpoint, keeping only
+-- the most recently created row for each one (run this BEFORE step 3; skip
+-- it if you know there are no duplicates):
+-- delete from push_subscriptions a
+--   using push_subscriptions b
+--   where a.endpoint = b.endpoint
+--     and a.created_at < b.created_at;
+--
+-- Step 3 — now that endpoints are unique, add the constraint:
 -- alter table push_subscriptions add constraint push_subscriptions_endpoint_key unique (endpoint);
 
 -- Track which day we last notified each user, so the daily cron doesn't spam.
