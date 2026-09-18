@@ -841,32 +841,68 @@ function urlBase64ToUint8Array(base64String){
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// TEMPORARY diagnostic toasts — one per step, so the flow can be traced on
+// iOS Safari where there's no way to open the browser console. Remove the
+// showToast()/_sleep() calls below once push subscriptions save reliably.
 async function subscribeToPush(){
-  if(!currentUser || !cloudConfigured()) return; // push storage needs the cloud account
-  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  showToast('Step 1: function started', 4000);
+  await _sleep(1500);
 
+  if(!currentUser){
+    showToast('Step 2 FAILED: no currentUser', 4000);
+    return;
+  }
+  if(!cloudConfigured()){
+    showToast('Step 2 FAILED: cloud not configured', 4000);
+    return;
+  }
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    showToast('Step 2 FAILED: push not supported on this browser', 4000);
+    return;
+  }
+  showToast('Step 2: checks passed', 4000);
+  await _sleep(1500);
+
+  let reg;
   try{
-    const reg = await navigator.serviceWorker.ready;
-    console.log('[subscribeToPush] service worker ready', reg);
+    reg = await navigator.serviceWorker.ready;
+  }catch(err){
+    console.error('[subscribeToPush] service worker not ready', err);
+    showToast('Step 3 FAILED: ' + err.message, 4000);
+    return;
+  }
+  showToast('Step 3: service worker ready', 4000);
+  await _sleep(1500);
 
-    let sub = await reg.pushManager.getSubscription();
+  let sub;
+  try{
+    sub = await reg.pushManager.getSubscription();
     if(!sub){
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
-    console.log('[subscribeToPush] pushManager subscription obtained', sub.toJSON());
+  }catch(err){
+    console.error('[subscribeToPush] pushManager.subscribe failed', err);
+    showToast('Step 4 FAILED: ' + err.message, 4000);
+    return;
+  }
+  showToast('Step 4: subscription obtained', 4000);
+  await _sleep(1500);
 
+  try{
     const { error } = await sb.from('push_subscriptions').upsert({
       user_id: currentUser.id,
       subscription: sub.toJSON(),
     }, { onConflict: 'user_id,endpoint' });
     if(error) throw error;
-    console.log('[subscribeToPush] subscription row saved to Supabase');
+    showToast('Step 5: saved', 4000);
   }catch(err){
-    console.error('[subscribeToPush] failed', err);
-    showToast('Push subscription failed: ' + err.message);
+    console.error('[subscribeToPush] Supabase upsert failed', err);
+    showToast('Step 5 FAILED: ' + err.message, 4000);
   }
 }
 
@@ -1049,11 +1085,11 @@ function itemRow(it, t, i){
   `;
 }
 
-function showToast(msg){
+function showToast(msg, duration = 2400){
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(()=> el.classList.remove('show'), 2400);
+  setTimeout(()=> el.classList.remove('show'), duration);
 }
 
 let lastRawText = '';
