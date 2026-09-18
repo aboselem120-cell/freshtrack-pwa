@@ -19,15 +19,19 @@ create policy "Users manage their own items"
   with check (auth.uid() = user_id);
 
 -- Push subscriptions: one row per device a user enabled notifications on.
--- `endpoint` is derived from the subscription payload and kept unique so that
--- re-subscribing the same browser/device (e.g. toggling notifications off and
--- back on) updates the existing row instead of inserting a duplicate.
+-- `endpoint` is derived from the subscription payload; (user_id, endpoint) is
+-- kept unique so that re-subscribing the same browser/device (e.g. toggling
+-- notifications off and back on) updates the existing row instead of
+-- inserting a duplicate. Scoping the uniqueness to user_id too (rather than
+-- endpoint alone) lets the same device be re-subscribed under a different
+-- signed-in user without a conflict.
 create table push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
   subscription jsonb not null,
-  endpoint text generated always as (subscription->>'endpoint') stored unique,
-  created_at timestamptz default now()
+  endpoint text generated always as (subscription->>'endpoint') stored,
+  created_at timestamptz default now(),
+  unique (user_id, endpoint)
 );
 
 alter table push_subscriptions enable row level security;
@@ -44,16 +48,17 @@ create policy "Users manage their own push subscriptions"
 -- Step 1 — add the derived column (safe to run even with existing rows):
 -- alter table push_subscriptions add column endpoint text generated always as (subscription->>'endpoint') stored;
 --
--- Step 2 — remove duplicate rows that share the same endpoint, keeping only
--- the most recently created row for each one (run this BEFORE step 3; skip
--- it if you know there are no duplicates):
+-- Step 2 — remove duplicate rows that share the same (user_id, endpoint),
+-- keeping only the most recently created row for each pair (run this BEFORE
+-- step 3; skip it if you know there are no duplicates):
 -- delete from push_subscriptions a
 --   using push_subscriptions b
---   where a.endpoint = b.endpoint
+--   where a.user_id = b.user_id
+--     and a.endpoint = b.endpoint
 --     and a.created_at < b.created_at;
 --
--- Step 3 — now that endpoints are unique, add the constraint:
--- alter table push_subscriptions add constraint push_subscriptions_endpoint_key unique (endpoint);
+-- Step 3 — now that (user_id, endpoint) pairs are unique, add the constraint:
+-- alter table push_subscriptions add constraint push_subscriptions_user_endpoint_key unique (user_id, endpoint);
 
 -- Track which day we last notified each user, so the daily cron doesn't spam.
 create table notification_log (
