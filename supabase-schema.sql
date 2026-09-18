@@ -19,10 +19,14 @@ create policy "Users manage their own items"
   with check (auth.uid() = user_id);
 
 -- Push subscriptions: one row per device a user enabled notifications on.
+-- `endpoint` is derived from the subscription payload and kept unique so that
+-- re-subscribing the same browser/device (e.g. toggling notifications off and
+-- back on) updates the existing row instead of inserting a duplicate.
 create table push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
   subscription jsonb not null,
+  endpoint text generated always as (subscription->>'endpoint') stored unique,
   created_at timestamptz default now()
 );
 
@@ -32,6 +36,13 @@ create policy "Users manage their own push subscriptions"
   on push_subscriptions for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Migration for a database created before the `endpoint` column existed:
+-- run this block instead of the `create table` above if push_subscriptions
+-- already exists. Fails if duplicate endpoints are already present — delete
+-- the older duplicate rows first in that case.
+-- alter table push_subscriptions add column endpoint text generated always as (subscription->>'endpoint') stored;
+-- alter table push_subscriptions add constraint push_subscriptions_endpoint_key unique (endpoint);
 
 -- Track which day we last notified each user, so the daily cron doesn't spam.
 create table notification_log (

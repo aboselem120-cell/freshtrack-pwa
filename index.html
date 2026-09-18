@@ -856,7 +856,7 @@ async function subscribeToPush(){
   await sb.from('push_subscriptions').upsert({
     user_id: currentUser.id,
     subscription: sub.toJSON(),
-  });
+  }, { onConflict: 'endpoint' });
 }
 
 const langNames = { en:'English', ar:'العربية', es:'Español' };
