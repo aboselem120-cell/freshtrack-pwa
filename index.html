@@ -1712,6 +1712,13 @@ initSupabase();
 maybeNotifyUrgentItems();
 maybeShowOnboarding();
 
+// PWA shortcut: "Scan Item" on the home-screen long-press opens straight to the camera
+const urlParams = new URLSearchParams(location.search);
+if(urlParams.get('action') === 'scan'){
+  triggerFilePicker();
+  history.replaceState(null, '', location.pathname);
+}
+
 // Re-check whenever the person comes back to the tab/app (not just cold load) —
 // e.g. switching back from another app, or unlocking the phone with FreshTrack
 // already open in the background. Still not true background push (see Settings
