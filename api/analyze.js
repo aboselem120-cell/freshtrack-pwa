@@ -16,6 +16,15 @@ Identify every distinct food/grocery item clearly visible or listed. Ignore non-
 - name: short common product name, in English, Arabic, and Spanish
 - category: exactly one of "dairy", "meat", "produce", "bakery", "pantry" (pick the closest fit)
 - expiry_date: ONLY if an expiry/best-before/"use by" date is printed directly on THAT item's own packaging and is clearly legible. Return it as "YYYY-MM-DD". Otherwise null.
+
+  If the expiry date is printed in dot-matrix, embossed, laser-etched, or any
+  low-contrast/hard-to-read font style where individual digits could be
+  confused with each other (e.g., distinguishing 3 vs 8, 1 vs 7, 0 vs 8, 5 vs
+  6 is genuinely uncertain), do NOT guess — treat it as unreadable and return
+  expiry_date null with estimated_days instead. Only return expiry_date when
+  you are highly confident in EVERY individual digit. A wrong date with false
+  confidence is worse than an honest estimate — never fabricate or guess at
+  unclear digits.
 - estimated_days: only when expiry_date is null — your best CONSERVATIVE integer
   estimate, in days, of remaining shelf life for THIS item as purchased today (not
   fresh off the production line — assume a few days have already passed in
