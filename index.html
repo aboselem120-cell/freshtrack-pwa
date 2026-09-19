@@ -347,11 +347,6 @@
     font-size:13.5px; color:var(--ink-soft); cursor:pointer;
   }
 
-  .onboard-dot{
-    width:7px; height:7px; border-radius:50%; background:var(--line);
-    transition:background .2s ease, transform .2s ease;
-  }
-  .onboard-dot.active{ background:var(--green); transform:scale(1.2); }
   .onboard-icon{ font-size:44px; margin-bottom:14px; }
   .onboard-title{ font-size:17px; font-weight:700; margin-bottom:8px; }
   .onboard-text{ font-size:13.5px; color:var(--ink-soft); line-height:1.7; }
@@ -362,12 +357,7 @@
 <div class="overlay" id="onboardOverlay" onclick="if(event.target===this) return;">
   <div class="sheet" style="text-align:center;">
     <div id="onboardStepContent"></div>
-    <div style="display:flex; justify-content:center; gap:6px; margin:16px 0;">
-      <span class="onboard-dot" id="dot0"></span>
-      <span class="onboard-dot" id="dot1"></span>
-      <span class="onboard-dot" id="dot2"></span>
-    </div>
-    <button class="scan-btn" style="margin-top:0;" onclick="onboardNext()" id="onboardBtn"></button>
+    <button class="scan-btn" style="margin-top:16px;" onclick="onboardNext()" id="onboardBtn"></button>
   </div>
 </div>
 
@@ -550,12 +540,9 @@ const translations = {
     importError:'Could not read that backup file',
     dailyLimitReached:'Daily limit reached — try again tomorrow',
     onboardSteps:[
-      { icon:'📸', title:'Snap a photo', text:'Scan a receipt or a single product — AI reads the item and its expiry date automatically.' },
-      { icon:'🚦', title:'Color-coded urgency', text:'Red means eat it now, orange means soon, green means you have time. Sorted for you automatically.' },
-      { icon:'✓', title:'Mark it used or wasted', text:'Tap ✓ when you use something, 🗑 if it went bad — that\'s how your monthly stats build up.' },
+      { icon:'📸', title:'Welcome to FreshTrack', text:'Snap a photo of any product — AI reads the expiry date and tracks it for you' },
     ],
-    onboardNext:'Next',
-    onboardStart:'Get Started',
+    onboardStart:'Start scanning',
     accountTitle:'Account & Sync',
     cloudNotConfigured:'Cloud sync isn\'t set up for this deployment yet — items stay on this device only.',
     signedInAs:'Signed in as',
@@ -628,12 +615,9 @@ const translations = {
     importError:'ما قدرنا نقرأ ملف النسخة الاحتياطية',
     dailyLimitReached:'وصلت الحد اليومي — جرب مرة ثانية بكرة',
     onboardSteps:[
-      { icon:'📸', title:'صوّر أي غرض', text:'صور إيصال أو منتج مفرد — الذكاء الاصطناعي يتعرف على ال��رض وتاريخ صلاحيته تلقائيًا.' },
-      { icon:'🚦', title:'ألوان توضح الأولوية', text:'أحمر يعني كله الحين، برتقالي يعني قريب، أخضر يعني عندك وقت. مرتبة لك تلقائيًا.' },
-      { icon:'✓', title:'علّمه استخدمته أو تلف', text:'اضغط ✓ لما تستخدم شي، 🗑 لو تلف — كذا تتكون إحصائيتك الشهرية.' },
+      { icon:'📸', title:'مرحبًا بك في FreshTrack', text:'صوّر أي منتج — الذكاء الاصطناعي يقرأ تاريخ الصلاحية ويتابعه لك' },
     ],
-    onboardNext:'التالي',
-    onboardStart:'ابدأ',
+    onboardStart:'ابدأ المسح',
     accountTitle:'الحساب والمزامنة',
     cloudNotConfigured:'المزامنة السحابية مو مفعّلة بهذه النسخة الحين — أغراضك تبقى بجهازك بس.',
     signedInAs:'سجّلت دخول كـ',
@@ -706,12 +690,9 @@ const translations = {
     importError:'No se pudo leer ese archivo de copia de seguridad',
     dailyLimitReached:'Límite diario alcanzado — inténtalo mañana',
     onboardSteps:[
-      { icon:'📸', title:'Toma una foto', text:'Escanea un recibo o un solo producto — la IA lee el artículo y su fecha de caducidad automáticamente.' },
-      { icon:'🚦', title:'Urgencia por colores', text:'Rojo significa cómelo ya, naranja pronto, verde tienes tiempo. Todo ordenado automáticamente.' },
-      { icon:'✓', title:'Marca usado o desechado', text:'Toca ✓ cuando uses algo, 🗑 si se echó a perder — así se construyen tus estadísticas mensuales.' },
+      { icon:'📸', title:'Bienvenido a FreshTrack', text:'Toma una foto de cualquier producto — la IA lee la fecha de caducidad y la controla por ti' },
     ],
-    onboardNext:'Siguiente',
-    onboardStart:'Empezar',
+    onboardStart:'Empezar a escanear',
     accountTitle:'Cuenta y sincronización',
     cloudNotConfigured:'La sincronización en la nube no está configurada aún — los artículos se quedan solo en este dispositivo.',
     signedInAs:'Sesión iniciada como',
@@ -1702,39 +1683,27 @@ function closeSettings(){ document.getElementById('overlay').classList.remove('s
 
 // --- First-launch onboarding ---
 const ONBOARD_KEY = 'freshtrack_onboarded';
-let onboardStep = 0;
 
 function maybeShowOnboarding(){
   if(localStorage.getItem(ONBOARD_KEY) === '1') return;
-  onboardStep = 0;
   renderOnboardStep();
   document.getElementById('onboardOverlay').classList.add('show');
 }
 
 function renderOnboardStep(){
   const t = translations[currentLang];
-  const steps = t.onboardSteps;
-  const s = steps[onboardStep];
+  const s = t.onboardSteps[0];
   document.getElementById('onboardStepContent').innerHTML = `
     <div class="onboard-icon">${s.icon}</div>
     <div class="onboard-title">${s.title}</div>
     <div class="onboard-text">${s.text}</div>
   `;
-  for(let i=0;i<3;i++){
-    document.getElementById('dot'+i).classList.toggle('active', i === onboardStep);
-  }
-  document.getElementById('onboardBtn').textContent = onboardStep === steps.length-1 ? t.onboardStart : t.onboardNext;
+  document.getElementById('onboardBtn').textContent = t.onboardStart;
 }
 
 function onboardNext(){
-  const t = translations[currentLang];
-  if(onboardStep < t.onboardSteps.length - 1){
-    onboardStep++;
-    renderOnboardStep();
-  } else {
-    localStorage.setItem(ONBOARD_KEY, '1');
-    document.getElementById('onboardOverlay').classList.remove('show');
-  }
+  localStorage.setItem(ONBOARD_KEY, '1');
+  document.getElementById('onboardOverlay').classList.remove('show');
 }
 
 loadItems();
