@@ -77,29 +77,40 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { image } = req.body || {};
-  if (!image) {
-    res.status(400).json({ error: 'Missing "image" (base64) in request body', code: 'bad_request' });
+  const { image, images } = req.body || {};
+  const imageList = Array.isArray(images) ? images : (image ? [image] : []);
+  if (imageList.length === 0) {
+    res.status(400).json({ error: 'Missing "image" or "images" (base64) in request body', code: 'bad_request' });
     return;
   }
 
-  const imageBytes = Math.round((image.length * 3) / 4);
-  console.log(`[analyze] request from ${ip}: image ~${imageBytes} bytes (base64 length ${image.length})`);
+  const totalBytes = imageList.reduce((sum, img) => sum + Math.round((img.length * 3) / 4), 0);
+  console.log(`[analyze] request from ${ip}: ${imageList.length} image(s), ~${totalBytes} bytes total`);
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   try {
     const model = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+    const userParts = [];
+    if (imageList.length > 1) {
+      userParts.push({
+        text: `These ${imageList.length} photos show the SAME single grocery item, photographed from ` +
+          `different angles (e.g. front and back, or top and bottom) specifically to find a printed ` +
+          `expiry date not visible in the first photo. Treat them as ONE item — return exactly one ` +
+          `entry in "items", not ${imageList.length}. Look across ALL the photos for a printed ` +
+          `expiry/best-before/use-by date; if found in any of them, use it. If genuinely not visible ` +
+          `in any, return expiry_date null and use estimated_days as usual.`,
+      });
+    } else {
+      userParts.push({ text: 'Analyze this photo and return the JSON as instructed.' });
+    }
+    imageList.forEach((img) => userParts.push({ inline_data: { mime_type: 'image/jpeg', data: img } }));
+
     const requestBody = JSON.stringify({
       system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: 'Analyze this photo and return the JSON as instructed.' },
-          { inline_data: { mime_type: 'image/jpeg', data: image } },
-        ],
-      }],
+      contents: [{ role: 'user', parts: userParts }],
       generationConfig: {
         response_mime_type: 'application/json',
       },
