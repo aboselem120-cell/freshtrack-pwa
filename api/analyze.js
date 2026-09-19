@@ -32,7 +32,10 @@ Identify every distinct food/grocery item clearly visible or listed. Ignore non-
   - Typical conservative reference ranges for a freshly purchased item (adjust
     down further if the photo shows the package is already open or heavily
     handled):
-    - Fresh dairy (milk, yogurt, soft cheese): 7-10 days
+    - Fresh liquid/spoonable dairy (milk, drinking yogurt, spoonable yogurt): 7-10 days
+    - Commercially packaged soft cheese with a sealed tub/wrap and a recent pack
+      date (cottage cheese, cream cheese, ricotta, labneh): 14-21 days unopened;
+      7-10 days once opened
     - UHT/shelf-stable dairy, unopened: 30-90 days (5-7 days once opened)
     - Eggs: 14-18 days
     - Fresh raw meat/poultry/fish: 2-4 days
@@ -83,32 +86,56 @@ export default async function handler(req, res) {
   const imageBytes = Math.round((image.length * 3) / 4);
   console.log(`[analyze] request from ${ip}: image ~${imageBytes} bytes (base64 length ${image.length})`);
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
   try {
     const model = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: 'Analyze this photo and return the JSON as instructed.' },
-            { inline_data: { mime_type: 'image/jpeg', data: image } },
-          ],
-        }],
-        generationConfig: {
-          response_mime_type: 'application/json',
-        },
-      }),
+    const requestBody = JSON.stringify({
+      system_instruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: 'Analyze this photo and return the JSON as instructed.' },
+          { inline_data: { mime_type: 'image/jpeg', data: image } },
+        ],
+      }],
+      generationConfig: {
+        response_mime_type: 'application/json',
+      },
     });
 
+    // Gemini occasionally returns 503 ("model overloaded") under high demand
+    // — this is transient, not a bug in our code, so retry a couple of times
+    // with backoff before giving up.
+    const MAX_ATTEMPTS = 3;
+    const BACKOFF_MS = [1000, 2000];
+    let response;
+    let lastErrText = '';
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody,
+      });
+
+      if (response.ok) break;
+
+      lastErrText = await response.text();
+      if (response.status !== 503) break; // not a transient overload — don't retry
+
+      console.warn(`[analyze] Gemini 503 (overloaded), attempt ${attempt}/${MAX_ATTEMPTS}`);
+      if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
+    }
+
     if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[analyze] Gemini API error ${response.status}:`, errText);
-      res.status(response.status).json({ error: `Gemini API error: ${errText}`, code: 'gemini_error' });
+      if (response.status === 503) {
+        console.error('[analyze] Gemini still overloaded after retries:', lastErrText);
+        res.status(503).json({ error: 'Gemini is currently overloaded. Please try again in a minute.', code: 'busy' });
+        return;
+      }
+      console.error(`[analyze] Gemini API error ${response.status}:`, lastErrText);
+      res.status(response.status).json({ error: `Gemini API error: ${lastErrText}`, code: 'gemini_error' });
       return;
     }
 

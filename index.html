@@ -482,6 +482,7 @@ const translations = {
     toastAdded:(n)=>`${n} items added automatically`,
     noMatch:"AI couldn't recognize any grocery items in this photo. Try a clearer, well-lit shot.",
     aiError:"Something went wrong analyzing the photo. Please try again.",
+    aiBusy:"The service is busy right now — please try again in a minute.",
     today:(d)=>d.toLocaleDateString('en-US',{day:'numeric',month:'short'}),
     dayLabel:(days)=>{
       if(days<0) return `Expired ${Math.abs(days)}d ago`;
@@ -553,6 +554,7 @@ const translations = {
     toastAdded:(n)=>`تمت إضافة ${n} أغراض تلقائيًا`,
     noMatch:'ما قدر الذكاء الاصطناعي يتعرف على أغراض بهذي الصورة. جرّب صورة أوضح بإضاءة أفضل.',
     aiError:'صار خلل أثناء تحليل الصورة. حاول مرة ثانية.',
+    aiBusy:'الخدمة مزدحمة حاليًا — حاول بعد دقيقة.',
     today:(d)=>d.toLocaleDateString('ar-SA',{day:'numeric',month:'short'}),
     dayLabel:(days)=>{
       if(days<0) return `منتهي من ${Math.abs(days)} يوم`;
@@ -624,6 +626,7 @@ const translations = {
     toastAdded:(n)=>`${n} artículos añadidos automáticamente`,
     noMatch:'La IA no pudo reconocer productos en esta foto. Prueba con una imagen más clara y bien iluminada.',
     aiError:'Algo salió mal al analizar la foto. Inténtalo de nuevo.',
+    aiBusy:'El servicio está saturado en este momento — inténtalo en un minuto.',
     today:(d)=>d.toLocaleDateString('es-ES',{day:'numeric',month:'short'}),
     dayLabel:(days)=>{
       if(days<0) return `Caducó hace ${Math.abs(days)}d`;
@@ -1162,6 +1165,10 @@ async function runAIAnalysis(file){
     const data = await response.json();
 
     if(!response.ok){
+      if(data.code === 'busy'){
+        finishAIResult(null, true, null, translations[currentLang].aiBusy);
+        return;
+      }
       throw new Error(data.error || `Request failed (${response.status})`);
     }
 
@@ -1184,7 +1191,7 @@ async function runAIAnalysis(file){
   }
 }
 
-function finishAIResult(result, hadError, errorDetail){
+function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   document.getElementById('previewWrap').innerHTML = '';
   document.getElementById('processingWrap').innerHTML = '';
   document.getElementById('scanBtn').disabled = false;
@@ -1195,6 +1202,10 @@ function finishAIResult(result, hadError, errorDetail){
 
   if(hadError){
     render(currentItems.length === 0, currentItems.length === 0 ? t.aiError : undefined);
+    if(friendlyMessage){
+      showToast(friendlyMessage, 5000);
+      return;
+    }
     // TEMPORARY: append the real error so it's diagnosable on iOS, where
     // there's no browser console. Once the root cause behind "Something
     // went wrong analyzing the photo" is confirmed, replace this with a
