@@ -14,7 +14,16 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
-  self.skipWaiting();
+  // No automatic skipWaiting() here — a newly installed worker stays in
+  // "waiting" until the page's update banner (see index.html) tells it to
+  // take over. Without this, updates activate silently in the background
+  // and an already-open tab keeps running old JS indefinitely.
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {
