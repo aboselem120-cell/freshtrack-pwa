@@ -1,9 +1,21 @@
 // Vercel Serverless Function — suggests a quick recipe using items that are
 // expiring soon. Text-only call to Gemini (no image), same free-tier key.
 
+import { isRateLimited, clientIp } from './_rateLimit.js';
+
+const RATE_LIMIT = 20; // requests per IP per hour
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const ip = clientIp(req);
+  if (isRateLimited(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
+    console.warn(`[recipe] rate limit hit for ${ip}`);
+    res.status(429).json({ error: 'Too many requests. Please try again later.', code: 'rate_limited' });
     return;
   }
 

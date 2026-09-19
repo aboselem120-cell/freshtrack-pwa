@@ -1151,6 +1151,7 @@ async function runAIAnalysis(file){
   bumpUsage('scan');
   try{
     const base64 = await fileToResizedBase64(file);
+    console.log(`[runAIAnalysis] sending image, base64 length ${base64.length}`);
 
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -1168,16 +1169,22 @@ async function runAIAnalysis(file){
     lastRawText = raw;
 
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    let parsed;
+    try{
+      parsed = JSON.parse(cleaned);
+    }catch(parseErr){
+      console.error('[runAIAnalysis] JSON parse failed', parseErr, 'raw:', raw.slice(0, 300));
+      throw new Error('Invalid JSON from AI: ' + parseErr.message);
+    }
     finishAIResult(parsed, false);
   } catch(err){
-    console.error(err);
+    console.error('[runAIAnalysis] failed', err);
     lastRawText = String(err);
-    finishAIResult(null, true);
+    finishAIResult(null, true, err.message);
   }
 }
 
-function finishAIResult(result, hadError){
+function finishAIResult(result, hadError, errorDetail){
   document.getElementById('previewWrap').innerHTML = '';
   document.getElementById('processingWrap').innerHTML = '';
   document.getElementById('scanBtn').disabled = false;
@@ -1188,7 +1195,12 @@ function finishAIResult(result, hadError){
 
   if(hadError){
     render(currentItems.length === 0, currentItems.length === 0 ? t.aiError : undefined);
-    showToast(t.aiError);
+    // TEMPORARY: append the real error so it's diagnosable on iOS, where
+    // there's no browser console. Once the root cause behind "Something
+    // went wrong analyzing the photo" is confirmed, replace this with a
+    // friendly, error-specific message (translated) and keep the raw
+    // detail server-side (Vercel logs) only.
+    showToast(errorDetail ? `${t.aiError} (${errorDetail})` : t.aiError, 5000);
     return;
   }
 
