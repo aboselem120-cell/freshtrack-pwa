@@ -494,6 +494,7 @@ const translations = {
     noMatch:"AI couldn't recognize any grocery items in this photo. Try a clearer, well-lit shot.",
     aiError:"Something went wrong analyzing the photo. Please try again.",
     aiBusy:"The service is busy right now — please try again in a minute.",
+    aiTimeout:"Request timed out — check your connection and try again.",
     secondPhotoHintTitle:"No printed date found — try photographing the other side or the bottom?",
     secondPhotoScanBtn:"Scan another angle",
     secondPhotoDismissBtn:"Dismiss",
@@ -569,6 +570,7 @@ const translations = {
     noMatch:'ما قدر الذكاء الاصطناعي يتعرف على أغراض بهذي الصورة. جرّب صورة أوضح بإضاءة أفضل.',
     aiError:'صار خلل أثناء تحليل الصورة. حاول مرة ثانية.',
     aiBusy:'الخدمة مزدحمة حاليًا — حاول بعد دقيقة.',
+    aiTimeout:'انتهت مهلة الطلب — تأكد من اتصالك بالإنترنت وحاول مرة ثانية.',
     secondPhotoHintTitle:'ما لقينا تاريخًا مطبوعًا — تحب تصوّر الجانب الثاني أو الأسفل؟',
     secondPhotoScanBtn:'صوّر زاوية ثانية',
     secondPhotoDismissBtn:'تجاهل',
@@ -644,6 +646,7 @@ const translations = {
     noMatch:'La IA no pudo reconocer productos en esta foto. Prueba con una imagen más clara y bien iluminada.',
     aiError:'Algo salió mal al analizar la foto. Inténtalo de nuevo.',
     aiBusy:'El servicio está saturado en este momento — inténtalo en un minuto.',
+    aiTimeout:'Se agotó el tiempo de espera — revisa tu conexión e inténtalo de nuevo.',
     secondPhotoHintTitle:'No encontramos una fecha impresa — ¿quieres fotografiar el otro lado o la parte de abajo?',
     secondPhotoScanBtn:'Fotografiar otro ángulo',
     secondPhotoDismissBtn:'Descartar',
@@ -1174,6 +1177,21 @@ function fileToResizedBase64(file, maxDim = 1024, quality = 0.85){
 // The system prompt now lives server-side in /api/analyze.js — the browser
 // only sends the image and never talks to Anthropic (or holds any API key) directly.
 
+const ANALYZE_TIMEOUT_MS = 90000; // must exceed the server's worst case (3 attempts × 25s + backoff ≈ 78s)
+
+async function fetchWithTimeout(url, options, timeoutMs){
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, { ...options, signal: controller.signal });
+  }catch(err){
+    if(err.name === 'AbortError') throw new Error('TIMEOUT');
+    throw err;
+  }finally{
+    clearTimeout(timeoutId);
+  }
+}
+
 async function runAIAnalysis(file){
   bumpUsage('scan');
   try{
@@ -1181,11 +1199,11 @@ async function runAIAnalysis(file){
     console.log(`[runAIAnalysis] sending image, base64 length ${base64.length}`);
     lastScannedImageBase64 = base64;
 
-    const response = await fetch("/api/analyze", {
+    const response = await fetchWithTimeout("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: base64 })
-    });
+    }, ANALYZE_TIMEOUT_MS);
 
     const data = await response.json();
 
@@ -1211,6 +1229,10 @@ async function runAIAnalysis(file){
     finishAIResult(parsed, false);
   } catch(err){
     console.error('[runAIAnalysis] failed', err);
+    if(err.message === 'TIMEOUT'){
+      finishAIResult(null, true, null, translations[currentLang].aiTimeout);
+      return;
+    }
     lastRawText = String(err);
     finishAIResult(null, true, err.message);
   }
@@ -1325,11 +1347,11 @@ async function handleSecondPhoto(event){
   const t = translations[currentLang];
   try{
     const secondImage = await fileToResizedBase64(file);
-    const response = await fetch("/api/analyze", {
+    const response = await fetchWithTimeout("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ images: [firstImage, secondImage] })
-    });
+    }, ANALYZE_TIMEOUT_MS);
 
     const data = await response.json();
     if(!response.ok){
@@ -1362,6 +1384,10 @@ async function handleSecondPhoto(event){
     showToast(t.secondPhotoStillNotFoundToast);
   }catch(err){
     console.error('[handleSecondPhoto] failed', err);
+    if(err.message === 'TIMEOUT'){
+      showToast(t.aiTimeout, 5000);
+      return;
+    }
     showToast(t.aiError + ' (' + err.message + ')', 5000);
   }
 }

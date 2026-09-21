@@ -125,19 +125,41 @@ export default async function handler(req, res) {
       },
     });
 
-    // Gemini occasionally returns 503 ("model overloaded") under high demand
-    // — this is transient, not a bug in our code, so retry a couple of times
-    // with backoff before giving up.
+    // Gemini occasionally returns 503 ("model overloaded") under high demand,
+    // or sometimes hangs entirely without responding — both are transient,
+    // not a bug in our code, so retry a couple of times with backoff. Each
+    // attempt gets its own timeout so a hung attempt can't stall the whole
+    // request indefinitely; the caller (index.html) waits longer than the
+    // worst case of all attempts combined so it never gives up first.
     const MAX_ATTEMPTS = 3;
     const BACKOFF_MS = [1000, 2000];
-    let response;
+    const ATTEMPT_TIMEOUT_MS = 25000;
+    let response = null;
     let lastErrText = '';
+    let timedOut = false;
+
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: requestBody,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: requestBody,
+          signal: controller.signal,
+        });
+        timedOut = false;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name !== 'AbortError') throw err; // genuine network error — handled by the outer catch
+        console.warn(`[analyze] Gemini attempt ${attempt}/${MAX_ATTEMPTS} timed out after ${ATTEMPT_TIMEOUT_MS}ms`);
+        response = null;
+        timedOut = true;
+        if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
+        continue;
+      }
+      clearTimeout(timeoutId);
 
       if (response.ok) break;
 
@@ -146,6 +168,12 @@ export default async function handler(req, res) {
 
       console.warn(`[analyze] Gemini 503 (overloaded), attempt ${attempt}/${MAX_ATTEMPTS}`);
       if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
+    }
+
+    if (timedOut) {
+      console.error('[analyze] Gemini did not respond within the timeout on every attempt');
+      res.status(504).json({ error: 'Gemini did not respond in time. Please try again.', code: 'timeout' });
+      return;
     }
 
     if (!response.ok) {
