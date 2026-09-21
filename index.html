@@ -1177,7 +1177,7 @@ function fileToResizedBase64(file, maxDim = 1024, quality = 0.85){
 // The system prompt now lives server-side in /api/analyze.js — the browser
 // only sends the image and never talks to Anthropic (or holds any API key) directly.
 
-const ANALYZE_TIMEOUT_MS = 90000; // must exceed the server's worst case (3 attempts × 25s + backoff ≈ 78s)
+const ANALYZE_TIMEOUT_MS = 120000; // must exceed the server's worst case: Gemini retries (~78s) + Groq fallback (~35s)
 
 async function fetchWithTimeout(url, options, timeoutMs){
   const controller = new AbortController();

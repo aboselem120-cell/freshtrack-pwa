@@ -65,6 +65,85 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this
 
 If you cannot confidently identify any grocery item in the photo, respond with {"items":[]}.`;
 
+// Groq is a free fallback used only after Gemini exhausts all retry attempts
+// (repeated 503 overload or a timeout on every attempt) — see GROQ_API_KEY.
+// Groq's /v1/models endpoint has no field indicating vision/image support, so
+// this list is the source of truth for which model IDs are known to accept
+// images (checked against Groq's docs as of 2026-09-21). Update it if Groq
+// changes its vision-capable lineup.
+const GROQ_VISION_MODEL_ALLOWLIST = [
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+];
+
+function buildUserInstructionText(imageList) {
+  if (imageList.length > 1) {
+    return `These ${imageList.length} photos show the SAME single grocery item, photographed from ` +
+      `different angles (e.g. front and back, or top and bottom) specifically to find a printed ` +
+      `expiry date not visible in the first photo. Treat them as ONE item — return exactly one ` +
+      `entry in "items", not ${imageList.length}. Look across ALL the photos for a printed ` +
+      `expiry/best-before/use-by date; if found in any of them, use it. If genuinely not visible ` +
+      `in any, return expiry_date null and use estimated_days as usual.`;
+  }
+  return 'Analyze this photo and return the JSON as instructed.';
+}
+
+async function pickGroqVisionModel() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const availableIds = new Set((data.data || []).filter((m) => m.active !== false).map((m) => m.id));
+    return GROQ_VISION_MODEL_ALLOWLIST.find((id) => availableIds.has(id)) || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function analyzeWithGroq(imageList) {
+  const model = await pickGroqVisionModel();
+  if (!model) return null; // no known vision-capable model available on this account
+
+  const content = [{ type: 'text', text: buildUserInstructionText(imageList) }];
+  imageList.forEach((img) => content.push({
+    type: 'image_url',
+    image_url: { url: `data:image/jpeg;base64,${img}` },
+  }));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Groq API error ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    if (!text) throw new Error('Groq returned an empty response');
+    return { text, model };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -102,19 +181,7 @@ export default async function handler(req, res) {
     const model = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-    const userParts = [];
-    if (imageList.length > 1) {
-      userParts.push({
-        text: `These ${imageList.length} photos show the SAME single grocery item, photographed from ` +
-          `different angles (e.g. front and back, or top and bottom) specifically to find a printed ` +
-          `expiry date not visible in the first photo. Treat them as ONE item — return exactly one ` +
-          `entry in "items", not ${imageList.length}. Look across ALL the photos for a printed ` +
-          `expiry/best-before/use-by date; if found in any of them, use it. If genuinely not visible ` +
-          `in any, return expiry_date null and use estimated_days as usual.`,
-      });
-    } else {
-      userParts.push({ text: 'Analyze this photo and return the JSON as instructed.' });
-    }
+    const userParts = [{ text: buildUserInstructionText(imageList) }];
     imageList.forEach((img) => userParts.push({ inline_data: { mime_type: 'image/jpeg', data: img } }));
 
     const requestBody = JSON.stringify({
@@ -170,6 +237,22 @@ export default async function handler(req, res) {
       if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
     }
 
+    const geminiRetryableFailure = timedOut || (!response.ok && response.status === 503);
+
+    if (geminiRetryableFailure && process.env.GROQ_API_KEY) {
+      console.warn(`[analyze] Gemini exhausted retries (${timedOut ? 'timeout' : '503 overloaded'}); trying Groq fallback`);
+      const groqResult = await analyzeWithGroq(imageList).catch((err) => {
+        console.error('[analyze] Groq fallback failed', err);
+        return null;
+      });
+      if (groqResult) {
+        console.error(`[analyze] provider used: groq (model ${groqResult.model}, fallback after Gemini failure)`);
+        res.status(200).json({ text: groqResult.text });
+        return;
+      }
+      console.error('[analyze] Groq fallback unavailable — returning original Gemini error');
+    }
+
     if (timedOut) {
       console.error('[analyze] Gemini did not respond within the timeout on every attempt');
       res.status(504).json({ error: 'Gemini did not respond in time. Please try again.', code: 'timeout' });
@@ -207,6 +290,7 @@ export default async function handler(req, res) {
       return;
     }
 
+    console.error('[analyze] provider used: gemini');
     res.status(200).json({ text });
   } catch (err) {
     console.error('[analyze] unexpected error', err);
