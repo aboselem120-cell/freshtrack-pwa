@@ -31,3 +31,4 @@ npm-debug.log*
 # Local scratch files
 curl
 install.cmd
+.claude/settings.local.json
