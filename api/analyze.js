@@ -16,7 +16,13 @@ const AI_SYSTEM_PROMPT = `You are a grocery item recognition assistant. You will
 Identify every distinct food/grocery item clearly visible or listed. Ignore non-food items. For each item return:
 - name: short common product name, in English, Arabic, and Spanish
 - category: exactly one of "dairy", "meat", "produce", "bakery", "pantry" (pick the closest fit)
-- expiry_date: the expiry / best-before / use-by date printed on THAT item's own packaging, as "YYYY-MM-DD". Otherwise null.
+- expiry_raw: FIRST, copy the expiry date text exactly as printed, character
+  for character, including its label (e.g. "EXP 03.11.2027", "BB 1503 27",
+  "صالح حتى ٢٠٢٧/٠٣/١٥"). Do not reformat or fix anything here. null if no
+  expiry date is printed or it is unreadable.
+- expiry_date: THEN convert expiry_raw into the expiry / best-before / use-by
+  date printed on THAT item's own packaging, as "YYYY-MM-DD". null whenever
+  expiry_raw is null.
 
   How to find it:
   - It is usually next to a label such as EXP, EXP., E, BB, BBE, Best before,
@@ -91,7 +97,7 @@ CRITICAL — receipts do not print per-item expiry dates:
 A store receipt's printed date (near the top or bottom, often next to a time, terminal number, or "thank you" line) is the TRANSACTION/PURCHASE date, not an expiry date for any item. NEVER copy a receipt's transaction date into any item's expiry_date field. When scanning a receipt (a list of item names with prices, no individual packaging visible), expiry_date must be null for every item — always use estimated_days instead. Only set expiry_date when you can see an individual product's actual packaging with a date printed on it (a single jar/carton/package photo, not a printed receipt).
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:
-{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
+{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","expiry_raw":"..."|null,"expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
 
 If you cannot confidently identify any grocery item in the photo, respond with {"items":[]}.`;
 
@@ -120,10 +126,16 @@ function buildUserInstructionText(imageList) {
   return today + 'Analyze this photo and return the JSON as instructed.';
 }
 
-function extractedDates(text) {
+// Printed dates the model read, as [{ raw, date }] (both null = estimated).
+// Dates only — no product names.
+function extractedExpiry(text) {
   try {
     const parsed = JSON.parse(String(text || '').replace(/```json|```/g, '').trim());
-    return Array.isArray(parsed.items) ? parsed.items.slice(0, 40).map((it) => it.expiry_date || null) : null;
+    if (!Array.isArray(parsed.items)) return null;
+    return parsed.items.slice(0, 20).map((it) => ({
+      raw: it.expiry_raw ? String(it.expiry_raw).slice(0, 40) : null,
+      date: it.expiry_date || null,
+    }));
   } catch {
     return null;
   }
@@ -171,6 +183,7 @@ async function analyzeWithGroq(imageList) {
           { role: 'user', content },
         ],
         response_format: { type: 'json_object' },
+        temperature: 0,
       }),
       signal: controller.signal,
     });
@@ -190,9 +203,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Testing aid: the owner's "scan with Groq" switch skips Gemini entirely so
+  // the fallback's accuracy can be measured on purpose. Harmless if anyone
+  // else sends it — it only swaps which free provider handles their scan.
+  const forceGroq = req.headers['x-force-provider'] === 'groq' && !!process.env.GROQ_API_KEY;
+
   // Every outcome below is recorded as one `scan` usage event (see _events.js).
   const startedAt = Date.now();
   let provider = null;
+  let providerModel = null;
   let imageCount = 0;
   let imageBytes = 0;
   const send = async (status, payload) => {
@@ -201,12 +220,13 @@ export default async function handler(req, res) {
       status,
       code: payload.code || null,
       provider,
+      model: providerModel,
+      forced: forceGroq || undefined,
       images: imageCount,
       bytes: imageBytes,
       ms: Date.now() - startedAt,
-      // Printed expiry dates the model read (null = estimated instead), to
-      // measure date-reading accuracy. Dates only — no product names.
-      dates: status === 200 ? extractedDates(payload.text) : null,
+      // To measure date-reading accuracy (see extractedExpiry).
+      dates: status === 200 ? extractedExpiry(payload.text) : null,
     });
     res.status(status).json(payload);
   };
@@ -240,6 +260,21 @@ export default async function handler(req, res) {
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  if (forceGroq) {
+    const groqResult = await analyzeWithGroq(imageList).catch((err) => {
+      console.error('[analyze] forced Groq failed', err);
+      return null;
+    });
+    if (groqResult) {
+      provider = 'groq';
+      providerModel = groqResult.model;
+      await send(200, { text: groqResult.text });
+    } else {
+      await send(503, { error: 'Groq is unavailable right now. Please try again in a minute.', code: 'busy' });
+    }
+    return;
+  }
+
   try {
     const model = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -252,6 +287,8 @@ export default async function handler(req, res) {
       contents: [{ role: 'user', parts: userParts }],
       generationConfig: {
         response_mime_type: 'application/json',
+        // Reading digits needs deterministic output, not creative sampling.
+        temperature: 0,
       },
     });
 
@@ -312,6 +349,7 @@ export default async function handler(req, res) {
       });
       if (groqResult) {
         provider = 'groq';
+        providerModel = groqResult.model;
         console.error(`[analyze] provider used: groq (model ${groqResult.model}, fallback after Gemini failure)`);
         await send(200, { text: groqResult.text });
         return;
@@ -365,6 +403,7 @@ export default async function handler(req, res) {
     }
 
     provider = 'gemini';
+    providerModel = model;
     console.error('[analyze] provider used: gemini');
     await send(200, { text });
   } catch (err) {

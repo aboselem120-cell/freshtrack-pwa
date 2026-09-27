@@ -813,6 +813,23 @@ function toggleAnalyticsExclusion(){
   renderAccountBox();
 }
 
+// Owner-only testing switch: send scans straight to the Groq fallback so its
+// date-reading accuracy can be measured on purpose (see api/analyze.js).
+const FORCE_GROQ_KEY = 'freshtrack_force_groq';
+
+function forceGroqEnabled(){
+  try { return localStorage.getItem(FORCE_GROQ_KEY) === '1'; } catch(e) { return false; }
+}
+
+function toggleForceGroq(){
+  try {
+    if(forceGroqEnabled()) localStorage.removeItem(FORCE_GROQ_KEY);
+    else localStorage.setItem(FORCE_GROQ_KEY, '1');
+  } catch(e) {}
+  showToast(forceGroqEnabled() ? '🧪 Scans now go to Groq (test mode)' : '🧪 Scans back to auto (Gemini first)', 3500);
+  renderAccountBox();
+}
+
 // --- Anonymous usage events (Supabase `events` table) ---
 // A random per-device id lets us count active and returning devices without
 // knowing who anyone is. No item names, photos or emails are ever sent.
@@ -842,6 +859,7 @@ function apiHeaders(){
   const id = deviceId();
   if(id) headers['X-Device-Id'] = id;
   if(analyticsExcluded()) headers['X-Owner'] = '1';
+  if(forceGroqEnabled()) headers['X-Force-Provider'] = 'groq';
   return headers;
 }
 
@@ -886,6 +904,10 @@ function renderAccountBox(){
         <div style="font-size:12px; color:var(--ink-soft); margin-top:10px;">
           📊 Analytics on this device: <strong style="color:var(--ink)">${analyticsExcluded() ? 'excluded' : 'counted'}</strong>
           · <a href="#" onclick="toggleAnalyticsExclusion(); return false;" style="color:var(--ink-soft);">${analyticsExcluded() ? 'include' : 'exclude'}</a>
+        </div>
+        <div style="font-size:12px; color:var(--ink-soft); margin-top:6px;">
+          🧪 Scan provider: <strong style="color:var(--ink)">${forceGroqEnabled() ? 'Groq (test)' : 'Auto'}</strong>
+          · <a href="#" onclick="toggleForceGroq(); return false;" style="color:var(--ink-soft);">${forceGroqEnabled() ? 'back to auto' : 'test with Groq'}</a>
         </div>` : ''}
     `;
   } else {
