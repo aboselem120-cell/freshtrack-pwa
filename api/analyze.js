@@ -90,6 +90,15 @@ function buildUserInstructionText(imageList) {
   return 'Analyze this photo and return the JSON as instructed.';
 }
 
+function extractedDates(text) {
+  try {
+    const parsed = JSON.parse(String(text || '').replace(/```json|```/g, '').trim());
+    return Array.isArray(parsed.items) ? parsed.items.slice(0, 40).map((it) => it.expiry_date || null) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function pickGroqVisionModel() {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -155,6 +164,7 @@ export default async function handler(req, res) {
   const startedAt = Date.now();
   let provider = null;
   let imageCount = 0;
+  let imageBytes = 0;
   const send = async (status, payload) => {
     await logEvent(req, 'scan', {
       ok: status === 200,
@@ -162,7 +172,11 @@ export default async function handler(req, res) {
       code: payload.code || null,
       provider,
       images: imageCount,
+      bytes: imageBytes,
       ms: Date.now() - startedAt,
+      // Printed expiry dates the model read (null = estimated instead), to
+      // measure date-reading accuracy. Dates only — no product names.
+      dates: status === 200 ? extractedDates(payload.text) : null,
     });
     res.status(status).json(payload);
   };
@@ -191,6 +205,7 @@ export default async function handler(req, res) {
   }
 
   const totalBytes = imageList.reduce((sum, img) => sum + Math.round((img.length * 3) / 4), 0);
+  imageBytes = totalBytes;
   console.log(`[analyze] request from ${ip}: ${imageList.length} image(s), ~${totalBytes} bytes total`);
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
