@@ -249,16 +249,18 @@ export default async function handler(req, res) {
       if (response.ok) break;
 
       lastErrText = await response.text();
+      // 429 = free-tier requests-per-minute quota: retrying Gemini within
+      // seconds won't help, so stop here and let the Groq fallback take it.
       if (response.status !== 503) break; // not a transient overload — don't retry
 
       console.warn(`[analyze] Gemini 503 (overloaded), attempt ${attempt}/${MAX_ATTEMPTS}`);
       if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_MS[attempt - 1]);
     }
 
-    const geminiRetryableFailure = timedOut || (!response.ok && response.status === 503);
+    const geminiRetryableFailure = timedOut || (!response.ok && (response.status === 503 || response.status === 429));
 
     if (geminiRetryableFailure && process.env.GROQ_API_KEY) {
-      console.warn(`[analyze] Gemini exhausted retries (${timedOut ? 'timeout' : '503 overloaded'}); trying Groq fallback`);
+      console.warn(`[analyze] Gemini failed (${timedOut ? 'timeout' : `${response.status} ${response.status === 429 ? 'rate limited' : 'overloaded'}`}); trying Groq fallback`);
       const groqResult = await analyzeWithGroq(imageList).catch((err) => {
         console.error('[analyze] Groq fallback failed', err);
         return null;
@@ -279,6 +281,14 @@ export default async function handler(req, res) {
     }
 
     if (!response.ok) {
+      if (response.status === 429) {
+        // Same friendly "busy, try again in a minute" message as a 503 (the
+        // app keys off code: 'busy'); the 429 status keeps it distinguishable
+        // in the events table.
+        console.error('[analyze] Gemini rate limited (429) and no fallback succeeded:', lastErrText);
+        await send(429, { error: 'Gemini is currently rate limited. Please try again in a minute.', code: 'busy' });
+        return;
+      }
       if (response.status === 503) {
         console.error('[analyze] Gemini still overloaded after retries:', lastErrText);
         await send(503, { error: 'Gemini is currently overloaded. Please try again in a minute.', code: 'busy' });
