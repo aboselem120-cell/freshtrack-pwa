@@ -15,8 +15,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- Vercel Web Analytics -->
-<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+<!-- Vercel Web Analytics — skipped on the owner's own devices so their visits
+     don't inflate visitor counts. ?notrack opts this device out, ?track opts it
+     back in, and signing in with an owner account opts out automatically
+     (see markOwnerDevice). -->
+<script>
+(function(){
+  var KEY = 'freshtrack_notrack';
+  var params = new URLSearchParams(location.search);
+  try {
+    if(params.has('notrack')) localStorage.setItem(KEY, '1');
+    if(params.has('track')) localStorage.removeItem(KEY);
+    if(localStorage.getItem(KEY) === '1') return;
+  } catch(e) {}
+  var s = document.createElement('script');
+  s.src = 'https://cdn.vercel-insights.com/v1/script.js';
+  document.head.appendChild(s);
+})();
+</script>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -736,6 +752,7 @@ function initSupabase(){
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   sb.auth.onAuthStateChange((event, session)=>{
     currentUser = session ? session.user : null;
+    markOwnerDevice(currentUser);
     renderAccountBox();
     if(currentUser && event === 'SIGNED_IN'){
       migrateLocalItemsToCloud().then(loadItemsFromCloud);
@@ -743,9 +760,34 @@ function initSupabase(){
   });
   sb.auth.getSession().then(({ data })=>{
     currentUser = data.session ? data.session.user : null;
+    markOwnerDevice(currentUser);
     renderAccountBox();
     if(currentUser) loadItemsFromCloud();
   });
+}
+
+// --- Keep the owner's devices out of Vercel Analytics ---
+// SHA-256 of the owner accounts' emails (hashed so the addresses aren't
+// published in the page source). Signing in with one flags this device, and
+// the analytics loader in <head> skips it from the next app launch onward.
+const NOTRACK_KEY = 'freshtrack_notrack';
+const OWNER_EMAIL_HASHES = [
+  '96114eb2ff63f4e2e5f188a926ad73bf8c95beae8f94448b32ea3b1281cbfc04',
+  '3678d0b4dbdae8ee161ba31619b210d15a0c30e713c28921ec62b92fbfe0bdbb',
+];
+
+async function markOwnerDevice(user){
+  if(!user || !user.email || !window.crypto || !crypto.subtle) return;
+  try {
+    if(localStorage.getItem(NOTRACK_KEY) === '1') return;
+    const bytes = new TextEncoder().encode(user.email.trim().toLowerCase());
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    if(OWNER_EMAIL_HASHES.includes(hex)){
+      localStorage.setItem(NOTRACK_KEY, '1');
+      showToast('📊 This device is now excluded from analytics');
+    }
+  } catch(e) {}
 }
 
 function renderAccountBox(){
@@ -1740,6 +1782,14 @@ maybeShowOnboarding();
 
 // PWA shortcut: "Scan Item" on the home-screen long-press opens straight to the camera
 const urlParams = new URLSearchParams(location.search);
+
+// Confirm the ?notrack / ?track opt-out on screen (the <head> loader already applied it)
+if(urlParams.has('notrack') || urlParams.has('track')){
+  showToast(urlParams.has('notrack')
+    ? '📊 This device is now excluded from analytics'
+    : '📊 Analytics re-enabled on this device', 3500);
+  history.replaceState(null, '', location.pathname);
+}
 if(urlParams.get('action') === 'scan'){
   triggerFilePicker();
   history.replaceState(null, '', location.pathname);
