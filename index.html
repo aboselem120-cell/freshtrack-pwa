@@ -315,6 +315,7 @@
     background:var(--ink); color:var(--paper);
     padding:10px 18px; border-radius:24px; font-size:13px;
     opacity:0; transition:all .3s ease; pointer-events:none; white-space:nowrap;
+    z-index:30;
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -776,18 +777,40 @@ const OWNER_EMAIL_HASHES = [
   '3678d0b4dbdae8ee161ba31619b210d15a0c30e713c28921ec62b92fbfe0bdbb',
 ];
 
+let currentUserIsOwner = false;
+
+function analyticsExcluded(){
+  try { return localStorage.getItem(NOTRACK_KEY) === '1'; } catch(e) { return false; }
+}
+
 async function markOwnerDevice(user){
+  currentUserIsOwner = false;
   if(!user || !user.email || !window.crypto || !crypto.subtle) return;
   try {
-    if(localStorage.getItem(NOTRACK_KEY) === '1') return;
     const bytes = new TextEncoder().encode(user.email.trim().toLowerCase());
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const hex = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-    if(OWNER_EMAIL_HASHES.includes(hex)){
+    if(!OWNER_EMAIL_HASHES.includes(hex)) return;
+    currentUserIsOwner = true;
+    if(!analyticsExcluded()){
       localStorage.setItem(NOTRACK_KEY, '1');
-      showToast('📊 This device is now excluded from analytics');
+      showToast('📊 This device is now excluded from analytics', 3500);
     }
   } catch(e) {}
+  // Owner-only status line in the account box (see renderAccountBox)
+  renderAccountBox();
+}
+
+// Owner-only manual switch, for devices where the flag needs flipping by hand
+function toggleAnalyticsExclusion(){
+  try {
+    if(analyticsExcluded()) localStorage.removeItem(NOTRACK_KEY);
+    else localStorage.setItem(NOTRACK_KEY, '1');
+  } catch(e) {}
+  showToast(analyticsExcluded()
+    ? '📊 This device is now excluded from analytics'
+    : '📊 Analytics re-enabled on this device', 3500);
+  renderAccountBox();
 }
 
 function renderAccountBox(){
@@ -804,6 +827,11 @@ function renderAccountBox(){
     box.innerHTML = `
       <div style="font-size:13px; color:var(--ink-soft); margin-bottom:8px;">${t.signedInAs} <strong style="color:var(--ink)">${currentUser.email}</strong></div>
       <button class="scan-btn secondary" style="margin-top:0;" onclick="signOutCloud()">${t.signOut}</button>
+      ${currentUserIsOwner ? `
+        <div style="font-size:12px; color:var(--ink-soft); margin-top:10px;">
+          📊 Analytics on this device: <strong style="color:var(--ink)">${analyticsExcluded() ? 'excluded' : 'counted'}</strong>
+          · <a href="#" onclick="toggleAnalyticsExclusion(); return false;" style="color:var(--ink-soft);">${analyticsExcluded() ? 'include' : 'exclude'}</a>
+        </div>` : ''}
     `;
   } else {
     // A tappable link in an email always opens Safari on iOS, never the
