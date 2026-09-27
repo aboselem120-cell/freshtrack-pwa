@@ -71,3 +71,34 @@ alter table notification_log enable row level security;
 create policy "Service role only"
   on notification_log for all
   using (false);
+
+-- Anonymous usage events, to measure real usage (daily active devices,
+-- retention, scans/day, AI failure rate). No names, images, emails or raw IPs.
+--   * scan / recipe are written server-side only (api/_events.js, service role),
+--     with a salted IP hash so per-user volume can inform rate limits.
+--   * the rest are written by the app with the anon key; clients can insert
+--     but never read, and can't forge server-only events or an ip_hash.
+--   * is_owner marks the owner's own devices so they can be filtered out.
+create table events (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  event text not null check (event in ('app_open','scan','recipe','item_added','item_resolved','sign_in','notif_enabled')),
+  device_id uuid,
+  user_id uuid references auth.users(id) on delete set null,
+  ip_hash text check (char_length(ip_hash) <= 64),
+  is_owner boolean not null default false,
+  props jsonb not null default '{}'::jsonb check (pg_column_size(props) < 2000)
+);
+
+create index events_event_created_idx on events (event, created_at);
+create index events_ip_hash_created_idx on events (ip_hash, created_at) where ip_hash is not null;
+
+alter table events enable row level security;
+
+create policy "Clients can log usage events"
+  on events for insert to anon, authenticated
+  with check (
+    event in ('app_open','item_added','item_resolved','sign_in','notif_enabled')
+    and ip_hash is null
+    and (user_id is null or user_id = auth.uid())
+  );

@@ -2,6 +2,7 @@
 // expiring soon. Text-only call to Gemini (no image), same free-tier key.
 
 import { isRateLimited, clientIp } from './_rateLimit.js';
+import { logEvent } from './_events.js';
 
 const RATE_LIMIT = 20; // requests per IP per hour
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -12,15 +13,27 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Every outcome below is recorded as one `recipe` usage event (see _events.js).
+  const startedAt = Date.now();
+  const send = async (status, payload) => {
+    await logEvent(req, 'recipe', {
+      ok: status === 200,
+      status,
+      code: payload.code || null,
+      ms: Date.now() - startedAt,
+    });
+    res.status(status).json(payload);
+  };
+
   const ip = clientIp(req);
   if (isRateLimited(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
     console.warn(`[recipe] rate limit hit for ${ip}`);
-    res.status(429).json({ error: 'Too many requests. Please try again later.', code: 'rate_limited' });
+    await send(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited' });
     return;
   }
 
   if (!process.env.GEMINI_API_KEY) {
-    res.status(500).json({
+    await send(500, {
       error: 'Server is missing GEMINI_API_KEY. Add it in your Vercel project settings under Environment Variables, then redeploy.'
     });
     return;
@@ -28,7 +41,7 @@ export default async function handler(req, res) {
 
   const { items, language } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) {
-    res.status(400).json({ error: 'Missing "items" (array of item names)' });
+    await send(400, { error: 'Missing "items" (array of item names)' });
     return;
   }
 
@@ -56,14 +69,14 @@ Keep it to 4-6 short steps.`;
 
     if (!response.ok) {
       const errText = await response.text();
-      res.status(response.status).json({ error: `Gemini API error: ${errText}` });
+      await send(response.status, { error: `Gemini API error: ${errText}` });
       return;
     }
 
     const data = await response.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    res.status(200).json({ text });
+    await send(200, { text });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    await send(500, { error: String(err) });
   }
 }

@@ -6,6 +6,7 @@
 // expiration) via Google AI Studio — good for prototyping without cost.
 
 import { isRateLimited, clientIp } from './_rateLimit.js';
+import { logEvent } from './_events.js';
 
 const RATE_LIMIT = 20; // requests per IP per hour
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -150,15 +151,31 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Every outcome below is recorded as one `scan` usage event (see _events.js).
+  const startedAt = Date.now();
+  let provider = null;
+  let imageCount = 0;
+  const send = async (status, payload) => {
+    await logEvent(req, 'scan', {
+      ok: status === 200,
+      status,
+      code: payload.code || null,
+      provider,
+      images: imageCount,
+      ms: Date.now() - startedAt,
+    });
+    res.status(status).json(payload);
+  };
+
   const ip = clientIp(req);
   if (isRateLimited(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
     console.warn(`[analyze] rate limit hit for ${ip}`);
-    res.status(429).json({ error: 'Too many requests. Please try again later.', code: 'rate_limited' });
+    await send(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited' });
     return;
   }
 
   if (!process.env.GEMINI_API_KEY) {
-    res.status(500).json({
+    await send(500, {
       error: 'Server is missing GEMINI_API_KEY. Get a free key at aistudio.google.com, add it in your Vercel project settings under Environment Variables, then redeploy.',
       code: 'missing_api_key',
     });
@@ -167,8 +184,9 @@ export default async function handler(req, res) {
 
   const { image, images } = req.body || {};
   const imageList = Array.isArray(images) ? images : (image ? [image] : []);
+  imageCount = imageList.length;
   if (imageList.length === 0) {
-    res.status(400).json({ error: 'Missing "image" or "images" (base64) in request body', code: 'bad_request' });
+    await send(400, { error: 'Missing "image" or "images" (base64) in request body', code: 'bad_request' });
     return;
   }
 
@@ -246,8 +264,9 @@ export default async function handler(req, res) {
         return null;
       });
       if (groqResult) {
+        provider = 'groq';
         console.error(`[analyze] provider used: groq (model ${groqResult.model}, fallback after Gemini failure)`);
-        res.status(200).json({ text: groqResult.text });
+        await send(200, { text: groqResult.text });
         return;
       }
       console.error('[analyze] Groq fallback unavailable — returning original Gemini error');
@@ -255,18 +274,18 @@ export default async function handler(req, res) {
 
     if (timedOut) {
       console.error('[analyze] Gemini did not respond within the timeout on every attempt');
-      res.status(504).json({ error: 'Gemini did not respond in time. Please try again.', code: 'timeout' });
+      await send(504, { error: 'Gemini did not respond in time. Please try again.', code: 'timeout' });
       return;
     }
 
     if (!response.ok) {
       if (response.status === 503) {
         console.error('[analyze] Gemini still overloaded after retries:', lastErrText);
-        res.status(503).json({ error: 'Gemini is currently overloaded. Please try again in a minute.', code: 'busy' });
+        await send(503, { error: 'Gemini is currently overloaded. Please try again in a minute.', code: 'busy' });
         return;
       }
       console.error(`[analyze] Gemini API error ${response.status}:`, lastErrText);
-      res.status(response.status).json({ error: `Gemini API error: ${lastErrText}`, code: 'gemini_error' });
+      await send(response.status, { error: `Gemini API error: ${lastErrText}`, code: 'gemini_error' });
       return;
     }
 
@@ -281,7 +300,7 @@ export default async function handler(req, res) {
         finishReason: candidate?.finishReason,
         promptFeedback: data?.promptFeedback,
       });
-      res.status(502).json({
+      await send(502, {
         error: blockReason
           ? `Gemini blocked the response (reason: ${blockReason})`
           : 'Gemini returned an empty response',
@@ -290,10 +309,11 @@ export default async function handler(req, res) {
       return;
     }
 
+    provider = 'gemini';
     console.error('[analyze] provider used: gemini');
-    res.status(200).json({ text });
+    await send(200, { text });
   } catch (err) {
     console.error('[analyze] unexpected error', err);
-    res.status(500).json({ error: String(err), code: 'server_error' });
+    await send(500, { error: String(err), code: 'server_error' });
   }
 }

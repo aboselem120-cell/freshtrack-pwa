@@ -813,6 +813,61 @@ function toggleAnalyticsExclusion(){
   renderAccountBox();
 }
 
+// --- Anonymous usage events (Supabase `events` table) ---
+// A random per-device id lets us count active and returning devices without
+// knowing who anyone is. No item names, photos or emails are ever sent.
+// Scans and recipes are logged server-side by the API itself; these headers
+// just let it attach the same device id and owner flag.
+const DEVICE_ID_KEY = 'freshtrack_device_id';
+const LAST_OPEN_KEY = 'freshtrack_last_open_logged';
+
+function deviceId(){
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if(!id){
+      id = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch(e) { return null; }
+}
+
+function apiHeaders(){
+  const headers = { 'Content-Type': 'application/json' };
+  const id = deviceId();
+  if(id) headers['X-Device-Id'] = id;
+  if(analyticsExcluded()) headers['X-Owner'] = '1';
+  return headers;
+}
+
+// Fire-and-forget: a failed insert must never affect the app.
+function track(event, props){
+  if(!sb) return;
+  try {
+    sb.from('events').insert({
+      event,
+      device_id: deviceId(),
+      user_id: currentUser ? currentUser.id : null,
+      is_owner: analyticsExcluded(),
+      props: props || {},
+    }).then(()=>{}, ()=>{});
+  } catch(e) {}
+}
+
+function trackDailyOpen(){
+  try {
+    const today = new Date().toDateString();
+    if(localStorage.getItem(LAST_OPEN_KEY) === today) return;
+    localStorage.setItem(LAST_OPEN_KEY, today);
+  } catch(e) { return; }
+  track('app_open');
+}
+
 function renderAccountBox(){
   const box = document.getElementById('accountBox');
   if(!box) return;
@@ -880,8 +935,10 @@ async function verifyOtpCode(){
   if(error){
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `${t.codeError} (${error.message || 'unknown error'})`;
+    return;
   }
   // On success, onAuthStateChange fires automatically and re-renders the box.
+  track('sign_in');
 }
 
 async function signOutCloud(){
@@ -1271,7 +1328,7 @@ async function runAIAnalysis(file){
 
     const response = await fetchWithTimeout("/api/analyze", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: apiHeaders(),
       body: JSON.stringify({ image: base64 })
     }, ANALYZE_TIMEOUT_MS);
 
@@ -1369,6 +1426,11 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   currentItems = [...currentItems, ...newItems];
   saveItems();
   newItems.forEach(syncItemToCloud);
+  track('item_added', {
+    source: 'scan',
+    count: newItems.length,
+    from_label: newItems.filter(it => it.fromLabel).length,
+  });
   render(false);
   showToast(t.toastAdded(newItems.length));
   maybeNotifyUrgentItems();
@@ -1419,7 +1481,7 @@ async function handleSecondPhoto(event){
     const secondImage = await fileToResizedBase64(file);
     const response = await fetchWithTimeout("/api/analyze", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: apiHeaders(),
       body: JSON.stringify({ images: [firstImage, secondImage] })
     }, ANALYZE_TIMEOUT_MS);
 
@@ -1467,6 +1529,7 @@ function resolveItem(id, outcome){
   saveItems();
   deleteItemFromCloud(id);
   bumpStat(outcome === 'used' ? 'usedCount' : 'wastedCount');
+  track('item_resolved', { outcome });
   render(currentItems.length === 0);
   showToast(translations[currentLang][outcome === 'used' ? 'itemUsed' : 'itemWasted']);
   updateStatsUI();
@@ -1575,6 +1638,7 @@ function saveItemEditor(){
       fromLabel: true,
     };
     currentItems.push(savedItem);
+    track('item_added', { source: 'manual', count: 1, from_label: 1 });
   }
 
   saveItems();
@@ -1630,7 +1694,7 @@ async function requestRecipe(){
   try{
     const response = await fetch('/api/recipe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders(),
       body: JSON.stringify({
         items: urgent.map(it => it.name.en),
         language: currentLang,
@@ -1711,6 +1775,7 @@ async function handleNotifToggle(){
     if(nowOn){
       maybeNotifyUrgentItems(true);
       subscribeToPush();
+      track('notif_enabled');
     }
     return;
   }
@@ -1719,6 +1784,7 @@ async function handleNotifToggle(){
     localStorage.setItem(NOTIF_KEY, '1');
     maybeNotifyUrgentItems(true);
     subscribeToPush();
+    track('notif_enabled');
   }
   updateNotifUI();
 }
@@ -1805,6 +1871,7 @@ function onboardNext(){
 loadItems();
 applyLang('en');
 initSupabase();
+trackDailyOpen();
 maybeNotifyUrgentItems();
 maybeShowOnboarding();
 
