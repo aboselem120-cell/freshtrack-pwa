@@ -1262,6 +1262,9 @@ function bumpUsage(kind){
 }
 
 function checkUsageLimit(kind, limit){
+  // The owner's own devices (see analyticsExcluded) skip the daily cap so
+  // repeated accuracy tests don't lock them out.
+  if(analyticsExcluded()) return true;
   if(getUsageCount(kind) >= limit){
     const t = translations[currentLang];
     showToast(t.dailyLimitReached);
