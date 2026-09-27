@@ -1280,7 +1280,9 @@ function handleFile(event){
 
 // Resize + compress to a reasonable size before sending to the vision model —
 // keeps the request fast and well within payload limits.
-function fileToResizedBase64(file, maxDim = 1024, quality = 0.85){
+// 2048px keeps small printed expiry dates legible (at 1024px a date on a
+// package was often only ~10-15px tall and the model refused to read it).
+function fileToResizedBase64(file, maxDim = 2048, quality = 0.85){
   return new Promise((resolve, reject)=>{
     const img = new Image();
     img.onload = ()=>{
@@ -1365,6 +1367,20 @@ async function runAIAnalysis(file){
   }
 }
 
+// A misread digit can turn 2028 into 2020 — a date years in the past (or
+// absurdly far ahead) would show a fresh item as long expired. Accept only
+// dates from 30 days ago to 15 years ahead; anything else falls back to the
+// estimate, like an unreadable date.
+function plausibleExpiry(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr);
+  if(isNaN(d.getTime())) return null;
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  if(d.getTime() < now - 30 * DAY || d.getTime() > now + 15 * 365 * DAY) return null;
+  return d;
+}
+
 function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   document.getElementById('previewWrap').innerHTML = '';
   document.getElementById('processingWrap').innerHTML = '';
@@ -1398,12 +1414,10 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   const today = new Date(); today.setHours(0,0,0,0);
   const newItems = items.map(it=>{
     let expiryDate, fromLabel;
-    if(it.expiry_date){
-      const d = new Date(it.expiry_date);
-      if(!isNaN(d.getTime())){
-        expiryDate = d.toISOString();
-        fromLabel = true;
-      }
+    const d = plausibleExpiry(it.expiry_date);
+    if(d){
+      expiryDate = d.toISOString();
+      fromLabel = true;
     }
     if(!expiryDate){
       const days = typeof it.estimated_days === 'number' ? it.estimated_days : 5;
@@ -1502,8 +1516,8 @@ async function handleSecondPhoto(event){
     if(!item){ return; } // resolved/deleted while the second photo was being analyzed
 
     if(found && found.expiry_date){
-      const d = new Date(found.expiry_date);
-      if(!isNaN(d.getTime())){
+      const d = plausibleExpiry(found.expiry_date);
+      if(d){
         item.expiryDate = d.toISOString();
         item.fromLabel = true;
         saveItems();

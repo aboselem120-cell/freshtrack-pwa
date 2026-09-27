@@ -16,16 +16,45 @@ const AI_SYSTEM_PROMPT = `You are a grocery item recognition assistant. You will
 Identify every distinct food/grocery item clearly visible or listed. Ignore non-food items. For each item return:
 - name: short common product name, in English, Arabic, and Spanish
 - category: exactly one of "dairy", "meat", "produce", "bakery", "pantry" (pick the closest fit)
-- expiry_date: ONLY if an expiry/best-before/"use by" date is printed directly on THAT item's own packaging and is clearly legible. Return it as "YYYY-MM-DD". Otherwise null.
+- expiry_date: the expiry / best-before / use-by date printed on THAT item's own packaging, as "YYYY-MM-DD". Otherwise null.
 
-  If the expiry date is printed in dot-matrix, embossed, laser-etched, or any
-  low-contrast/hard-to-read font style where individual digits could be
-  confused with each other (e.g., distinguishing 3 vs 8, 1 vs 7, 0 vs 8, 5 vs
-  6 is genuinely uncertain), do NOT guess — treat it as unreadable and return
-  expiry_date null with estimated_days instead. Only return expiry_date when
-  you are highly confident in EVERY individual digit. A wrong date with false
-  confidence is worse than an honest estimate — never fabricate or guess at
-  unclear digits.
+  How to find it:
+  - It is usually next to a label such as EXP, EXP., E, BB, BBE, Best before,
+    Best before end, Use by, MHD, Cad., Consumir antes de, or in Arabic
+    تاريخ الانتهاء / ينتهي / انتهاء / صالح حتى / يفضل استهلاكه قبل.
+  - Packages often also print things that are NOT the expiry date — ignore
+    them: production/packing dates (PROD, P, MFG, PKD, Packed, Fab.,
+    تاريخ الإنتاج / إنتاج), lot/batch codes (LOT, L, LDT, often mixed letters
+    and digits like "L2305B" or "4721A"), times (e.g. 09:30), plant or line
+    codes, and prices.
+  - If two dates are printed without clear labels, the LATER one is the expiry
+    and the earlier one is the production date.
+  - If only a production date and a shelf life are printed (e.g. "best within
+    12 months of production", "صالح لمدة 12 شهر من تاريخ الإنتاج"), compute
+    the expiry = production date + that period.
+
+  How to read it:
+  - Common formats: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YY, DD MM YY, compact
+    "DDMM YY" (e.g. "1503 27" = 2027-03-15), "DD MON YYYY" (e.g. 03 MAR 2027).
+    Digits may be Western (0-9) or Arabic-Indic (٠-٩).
+  - Assume DAY first (DD/MM) — the international and Middle Eastern
+    convention — unless the order is unambiguous otherwise (a first number
+    above 12 can't be a month) or the product is clearly US-labelled. If both
+    orders are genuinely possible, pick whichever gives the EARLIER date.
+  - Two-digit years mean 20YY.
+  - Month and year only (e.g. "11/2029", "NOV 2029"): use the FIRST day of
+    that month.
+  - Sanity check against today's date (given in the user message): a real
+    expiry on a product being scanned is almost never years in the past. If
+    your reading gives such a date, a digit was misread — look again, and if
+    still unsure return null.
+
+  Accuracy rule: read the date whenever its digits are legible, including
+  dot-matrix, embossed or laser-etched print. But if an individual digit is
+  genuinely ambiguous (e.g. 3 vs 8, 1 vs 7, 0 vs 8, 5 vs 6) and context can't
+  settle it, do NOT guess — return expiry_date null with estimated_days
+  instead. A wrong date with false confidence is worse than an honest
+  estimate.
 - estimated_days: only when expiry_date is null — your best CONSERVATIVE integer
   estimate, in days, of remaining shelf life for THIS item as purchased today (not
   fresh off the production line — assume a few days have already passed in
@@ -79,15 +108,16 @@ const GROQ_VISION_MODEL_ALLOWLIST = [
 ];
 
 function buildUserInstructionText(imageList) {
+  const today = `Today's date is ${new Date().toISOString().slice(0, 10)}. `;
   if (imageList.length > 1) {
-    return `These ${imageList.length} photos show the SAME single grocery item, photographed from ` +
+    return today + `These ${imageList.length} photos show the SAME single grocery item, photographed from ` +
       `different angles (e.g. front and back, or top and bottom) specifically to find a printed ` +
       `expiry date not visible in the first photo. Treat them as ONE item — return exactly one ` +
       `entry in "items", not ${imageList.length}. Look across ALL the photos for a printed ` +
       `expiry/best-before/use-by date; if found in any of them, use it. If genuinely not visible ` +
       `in any, return expiry_date null and use estimated_days as usual.`;
   }
-  return 'Analyze this photo and return the JSON as instructed.';
+  return today + 'Analyze this photo and return the JSON as instructed.';
 }
 
 function extractedDates(text) {
