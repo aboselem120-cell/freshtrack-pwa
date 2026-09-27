@@ -288,6 +288,10 @@
   #recipeContent ul{ padding-inline-start:20px; margin-top:6px; }
 
   .empty{ text-align:center; padding:36px 10px 10px; color:var(--ink-soft); font-size:13.5px; line-height:1.9; }
+  .demo-link{
+    display:inline-block; margin-top:6px; background:none; border:none; padding:4px 8px;
+    color:var(--green); font:inherit; font-weight:600; text-decoration:underline; cursor:pointer;
+  }
   .empty-icon{
     font-size:30px; margin-bottom:8px; display:block;
     animation:gentleFloat 2.6s ease-in-out infinite;
@@ -375,6 +379,7 @@
   <div class="sheet" style="text-align:center;">
     <div id="onboardStepContent"></div>
     <button class="scan-btn" style="margin-top:16px;" onclick="onboardNext()" id="onboardBtn"></button>
+    <button class="scan-btn secondary" onclick="onboardDemo()" id="onboardDemoBtn"></button>
   </div>
 </div>
 
@@ -430,6 +435,7 @@
       <div class="empty" id="emptyState">
         <span class="empty-icon">🧾</span>
         <span data-t="emptyText">Take a photo of your receipt and we'll sort every item by how soon it expires</span>
+        <br><button class="demo-link" onclick="runDemoScan()" data-t="demoLink">or try a demo</button>
       </div>
     </div>
 
@@ -561,6 +567,10 @@ const translations = {
       { icon:'📸', title:'Welcome to FreshTrack', text:'Snap a photo of any product — AI reads the expiry date and tracks it for you' },
     ],
     onboardStart:'Start scanning',
+    demoTry:'Try a demo first',
+    demoLink:'or try a demo',
+    demoBadge:'Demo',
+    demoDone:"That's how it works! Now try it with a product from your kitchen 📷",
     accountTitle:'Account & Sync',
     cloudNotConfigured:'Cloud sync isn\'t set up for this deployment yet — items stay on this device only.',
     signedInAs:'Signed in as',
@@ -637,6 +647,10 @@ const translations = {
       { icon:'📸', title:'مرحبًا بك في FreshTrack', text:'صوّر أي منتج — الذكاء الاصطناعي يقرأ تاريخ الصلاحية ويتابعه لك' },
     ],
     onboardStart:'ابدأ المسح',
+    demoTry:'جرّب مثال أولًا',
+    demoLink:'أو جرّب مثال',
+    demoBadge:'مثال',
+    demoDone:'هذي هي الفكرة! الحين جرّب مع منتج من مطبخك 📷',
     accountTitle:'الحساب والمزامنة',
     cloudNotConfigured:'المزامنة السحابية مو مفعّلة بهذه النسخة الحين — أغراضك تبقى بجهازك بس.',
     signedInAs:'سجّلت دخول كـ',
@@ -713,6 +727,10 @@ const translations = {
       { icon:'📸', title:'Bienvenido a FreshTrack', text:'Toma una foto de cualquier producto — la IA lee la fecha de caducidad y la controla por ti' },
     ],
     onboardStart:'Empezar a escanear',
+    demoTry:'Probar un ejemplo primero',
+    demoLink:'o prueba un ejemplo',
+    demoBadge:'Ejemplo',
+    demoDone:'¡Así funciona! Ahora pruébalo con un producto de tu cocina 📷',
     accountTitle:'Cuenta y sincronización',
     cloudNotConfigured:'La sincronización en la nube no está configurada aún — los artículos se quedan solo en este dispositivo.',
     signedInAs:'Sesión iniciada como',
@@ -974,8 +992,9 @@ async function signOutCloud(){
 // One-time upload of whatever's currently in localStorage the first time
 // someone signs in, so they don't lose items they added before creating an account.
 async function migrateLocalItemsToCloud(){
-  if(!currentItems.length) return;
-  const rows = currentItems.map(it => ({
+  const realItems = currentItems.filter(it => !it.demo);
+  if(!realItems.length) return;
+  const rows = realItems.map(it => ({
     id: it.id, user_id: currentUser.id, name: it.name,
     category: it.category, expiry_date: it.expiryDate, from_label: !!it.fromLabel,
   }));
@@ -1207,9 +1226,11 @@ function itemRow(it, t, i){
   // Explicit, always-visible distinction — not just a hover tooltip — between a
   // date actually printed on packaging and a category-average guess. Someone
   // deciding whether to eat something should never mistake one for the other.
-  const sublabel = it.fromLabel
-    ? `📅 ${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
-    : `≈ ${t.estimatedLabel}`;
+  const sublabel = it.demo
+    ? `🧪 ${t.demoBadge} · ≈ ${t.estimatedLabel}`
+    : it.fromLabel
+      ? `📅 ${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
+      : `≈ ${t.estimatedLabel}`;
   const sublabelClass = it.fromLabel ? 'verified' : 'estimated';
 
   return `
@@ -1392,6 +1413,88 @@ async function runAIAnalysis(file){
   }
 }
 
+// --- Demo scan ---
+// Lets a first-time visitor see the whole flow without a product in hand: a
+// drawn sample receipt "scans" for ~2s and adds canned items. No AI call, so
+// it's instant, can't fail and uses no quota. Demo items carry `demo: true` —
+// shown with a badge, never synced/exported/notified/counted in stats, and
+// cleared by the first real scan or manual add. Receipt items have no printed
+// dates, so relative estimates keep the result sensible on any day.
+const DEMO_ITEMS = [
+  { name:{ en:'Chicken breast', ar:'صدر دجاج', es:'Pechuga de pollo' }, category:'meat', days:2 },
+  { name:{ en:'Spinach', ar:'سبانخ', es:'Espinacas' }, category:'produce', days:3 },
+  { name:{ en:'Whole wheat bread', ar:'خبز بر', es:'Pan integral' }, category:'bakery', days:5 },
+  { name:{ en:'Fresh milk 1L', ar:'حليب طازج ١ لتر', es:'Leche fresca 1L' }, category:'dairy', days:7 },
+  { name:{ en:'Basmati rice', ar:'رز بسمتي', es:'Arroz basmati' }, category:'pantry', days:365 },
+];
+
+function demoReceiptImage(){
+  const rows = [['MILK 1L','1.29'],['CHICKEN BREAST','5.49'],['SPINACH','1.99'],['WHOLE WHEAT BREAD','2.10'],['BASMATI RICE 1KG','3.80']];
+  const lines = rows.map((r, i) =>
+    `<text x="24" y="${118 + i*28}">${r[0]}</text><text x="276" y="${118 + i*28}" text-anchor="end">${r[1]}</text>`
+  ).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="330" viewBox="0 0 300 330">
+    <rect width="300" height="330" fill="#fffdf7"/>
+    <g font-family="Courier New, monospace" font-size="14" fill="#2b2620">
+      <text x="150" y="40" text-anchor="middle" font-size="18" font-weight="bold">GREEN MARKET</text>
+      <text x="150" y="62" text-anchor="middle" font-size="11">*** SAMPLE RECEIPT ***</text>
+      <line x1="20" y1="82" x2="280" y2="82" stroke="#2b2620" stroke-dasharray="4 3"/>
+      ${lines}
+      <line x1="20" y1="252" x2="280" y2="252" stroke="#2b2620" stroke-dasharray="4 3"/>
+      <text x="24" y="280" font-weight="bold">TOTAL</text><text x="276" y="280" text-anchor="end" font-weight="bold">14.67</text>
+      <text x="150" y="312" text-anchor="middle" font-size="11">THANK YOU</text>
+    </g>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+let demoRunning = false;
+
+function runDemoScan(){
+  if(demoRunning) return;
+  demoRunning = true;
+  dismissSecondPhotoHint();
+  const t = translations[currentLang];
+
+  document.getElementById('previewWrap').innerHTML = `
+    <div class="preview-wrap">
+      <img src="${demoReceiptImage()}" alt="sample receipt">
+      <div class="scan-line"></div>
+    </div>
+  `;
+  document.getElementById('processingWrap').innerHTML = `
+    <div class="processing-label">${t.processing}</div>
+  `;
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('previewWrap').scrollIntoView({ behavior:'smooth', block:'center' });
+
+  setTimeout(()=>{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const demoItems = DEMO_ITEMS.map((d, i) => {
+      const expiry = new Date(today);
+      expiry.setDate(expiry.getDate() + d.days);
+      return {
+        id: 'demo_' + Date.now() + '_' + i,
+        name: d.name,
+        category: d.category,
+        expiryDate: expiry.toISOString(),
+        fromLabel: false,
+        demo: true,
+      };
+    });
+    currentItems = [...currentItems.filter(it => !it.demo), ...demoItems];
+    saveItems();
+
+    document.getElementById('previewWrap').innerHTML = '';
+    document.getElementById('processingWrap').innerHTML = '';
+    document.getElementById('scanBtn').disabled = false;
+    render(false);
+    showToast(t.demoDone, 5000);
+    track('item_added', { source: 'demo', count: demoItems.length, from_label: 0 });
+    demoRunning = false;
+  }, 2200);
+}
+
 // A misread digit can turn 2028 into 2020 — a date years in the past (or
 // absurdly far ahead) would show a fresh item as long expired. Accept only
 // dates from 30 days ago to 15 years ahead; anything else falls back to the
@@ -1462,7 +1565,8 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   });
 
   // Scans accumulate into one running list (a fridge inventory), not replace it.
-  currentItems = [...currentItems, ...newItems];
+  // The first real scan clears any demo items.
+  currentItems = [...currentItems.filter(it => !it.demo), ...newItems];
   saveItems();
   newItems.forEach(syncItemToCloud);
   track('item_added', {
@@ -1564,11 +1668,15 @@ async function handleSecondPhoto(event){
 }
 
 function resolveItem(id, outcome){
+  const resolved = currentItems.find(it => it.id === id);
+  const isDemo = !!(resolved && resolved.demo);
   currentItems = currentItems.filter(it => it.id !== id);
   saveItems();
-  deleteItemFromCloud(id);
-  bumpStat(outcome === 'used' ? 'usedCount' : 'wastedCount');
-  track('item_resolved', { outcome });
+  if(!isDemo){
+    deleteItemFromCloud(id);
+    bumpStat(outcome === 'used' ? 'usedCount' : 'wastedCount');
+    track('item_resolved', { outcome });
+  }
   render(currentItems.length === 0);
   showToast(translations[currentLang][outcome === 'used' ? 'itemUsed' : 'itemWasted']);
   updateStatsUI();
@@ -1663,6 +1771,7 @@ function saveItemEditor(){
       // Editing overwrites the name only in the currently active language,
       // keeping the other two languages from the original AI/manual entry untouched.
       it.name = { ...it.name, [currentLang]: name };
+      delete it.demo; // an edited demo item becomes the user's own
       it.category = category;
       it.expiryDate = expiryDate;
       it.fromLabel = true; // manually confirmed, treat as a real date
@@ -1676,6 +1785,7 @@ function saveItemEditor(){
       expiryDate,
       fromLabel: true,
     };
+    currentItems = currentItems.filter(it => !it.demo);
     currentItems.push(savedItem);
     track('item_added', { source: 'manual', count: 1, from_label: 1 });
   }
@@ -1689,7 +1799,7 @@ function saveItemEditor(){
 
 // --- Backup: export/import a JSON file — a manual, no-account alternative to cloud sync ---
 function exportBackup(){
-  const payload = { items: currentItems, exportedAt: new Date().toISOString() };
+  const payload = { items: currentItems.filter(it => !it.demo), exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1855,7 +1965,7 @@ function updateNotifUI(){
 
 function maybeNotifyUrgentItems(force){
   if(!notifEnabled()) return;
-  const urgentCount = currentItems.filter(it => daysUntil(it.expiryDate) <= 3).length;
+  const urgentCount = currentItems.filter(it => !it.demo && daysUntil(it.expiryDate) <= 3).length;
   if(urgentCount === 0) return;
 
   const todayStr = new Date().toDateString();
@@ -1900,6 +2010,12 @@ function renderOnboardStep(){
     <div class="onboard-text">${s.text}</div>
   `;
   document.getElementById('onboardBtn').textContent = t.onboardStart;
+  document.getElementById('onboardDemoBtn').textContent = t.demoTry;
+}
+
+function onboardDemo(){
+  onboardNext();
+  runDemoScan();
 }
 
 function onboardNext(){
