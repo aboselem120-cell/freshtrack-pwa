@@ -7,6 +7,18 @@ import { createClient } from '@supabase/supabase-js';
 import webPush from 'web-push';
 
 export default async function handler(req, res) {
+  // Only Vercel Cron may trigger this: it sends "Authorization: Bearer <CRON_SECRET>"
+  // automatically when that env var is set. Without this check anyone could hit
+  // the URL and push notifications to every user (and burn the day's one reminder).
+  if (!process.env.CRON_SECRET) {
+    res.status(500).json({ error: 'Missing CRON_SECRET' });
+    return;
+  }
+  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     res.status(500).json({ error: 'Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
     return;
