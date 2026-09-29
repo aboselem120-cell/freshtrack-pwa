@@ -986,7 +986,7 @@ async function signOutCloud(){
   currentUser = null;
   renderAccountBox();
   loadItems(); // fall back to whatever's in local storage
-  render(currentItems.length === 0);
+  render(false);
 }
 
 // One-time upload of whatever's currently in localStorage the first time
@@ -1008,7 +1008,7 @@ async function loadItemsFromCloud(){
     id: row.id, name: row.name, category: row.category,
     expiryDate: row.expiry_date, fromLabel: row.from_label,
   }));
-  render(currentItems.length === 0);
+  render(false);
   maybeNotifyUrgentItems();
 }
 
@@ -1677,7 +1677,7 @@ function resolveItem(id, outcome){
     bumpStat(outcome === 'used' ? 'usedCount' : 'wastedCount');
     track('item_resolved', { outcome });
   }
-  render(currentItems.length === 0);
+  render(false);
   showToast(translations[currentLang][outcome === 'used' ? 'itemUsed' : 'itemWasted']);
   updateStatsUI();
 }
@@ -1793,7 +1793,7 @@ function saveItemEditor(){
   saveItems();
   if(savedItem) syncItemToCloud(savedItem);
   closeItemEditor();
-  render(currentItems.length === 0);
+  render(false);
   maybeNotifyUrgentItems();
 }
 
@@ -1819,7 +1819,7 @@ function importBackup(event){
       if(!Array.isArray(parsed.items)) throw new Error('bad format');
       currentItems = [...currentItems, ...parsed.items];
       saveItems();
-      render(currentItems.length === 0);
+      render(false);
       showToast(translations[currentLang].importSuccess(parsed.items.length));
     } catch(e){
       showToast(translations[currentLang].importError);
