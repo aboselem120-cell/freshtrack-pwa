@@ -254,8 +254,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  // One product, up to 3 angles; the client keeps the total under ~3.5MB.
+  // Without these caps one request could carry any number of images.
+  if (imageList.length > 3) {
+    await send(400, { error: 'At most 3 images per scan', code: 'too_many_images' });
+    return;
+  }
+
   const totalBytes = imageList.reduce((sum, img) => sum + Math.round((img.length * 3) / 4), 0);
   imageBytes = totalBytes;
+  if (totalBytes > 4 * 1024 * 1024) {
+    await send(413, { error: 'Images too large', code: 'too_large' });
+    return;
+  }
   console.log(`[analyze] request from ${ip}: ${imageList.length} image(s), ~${totalBytes} bytes total`);
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

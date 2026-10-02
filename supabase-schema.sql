@@ -102,3 +102,11 @@ create policy "Clients can log usage events"
     and ip_hash is null
     and (user_id is null or user_id = auth.uid())
   );
+
+-- Product photo thumbnail (150px JPEG data URL, ~6-10KB) shown in the list.
+-- Nullable: items added manually, from receipts, or before this column
+-- existed have none and fall back to an icon. Covered by the existing
+-- "Users manage their own items" RLS policy; the check caps row size.
+alter table items
+  add column image_thumbnail text
+  check (image_thumbnail is null or length(image_thumbnail) < 30000);

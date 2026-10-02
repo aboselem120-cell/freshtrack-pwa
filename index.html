@@ -686,6 +686,20 @@
   .group-expand .sub-item{ padding-inline-start:30px; border-bottom-color:rgba(142,142,142,0.2); }
   .group-expand .sub-item:last-child{ border-bottom:none; }
   .group-expand .sub-item .item-name{ font-size:14px; font-weight:600; }
+
+  /* ===== Product photos + multi-angle sheet ===== */
+  .item-icon.has-photo{ border-radius:50%; background:none; }
+  .item-photo{ width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
+  .shot-sheet{ text-align:center; }
+  .shot-strip{ display:flex; gap:10px; justify-content:center; margin-bottom:8px; }
+  .shot-thumb{ position:relative; width:84px; height:84px; }
+  .shot-thumb img{ width:100%; height:100%; object-fit:cover; border-radius:12px; display:block; }
+  .shot-remove{
+    position:absolute; top:-7px; right:-7px; width:24px; height:24px; border-radius:50%;
+    border:2px solid var(--card); background:#2B2B2B; color:#fff; font-size:11px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .shot-hint{ font-size:12.5px; color:var(--ink-soft); margin-top:10px; }
 </style>
 </head>
 <body id="body">
@@ -747,6 +761,7 @@
 
     <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)">
     <input type="file" id="secondPhotoInput" accept="image/*" capture="environment" onchange="handleSecondPhoto(event)" style="display:none;">
+    <input type="file" id="multiShotInput" accept="image/*" capture="environment" onchange="handleMultiShot(event)" style="display:none;">
 
     <div id="previewWrap"></div>
     <div id="processingWrap"></div>
@@ -786,7 +801,7 @@
 
   <!-- disabled together with #scanBtn while a photo is analyzed (setScanBusy).
        Icon: scan frame with an AI sparkle — scanning is the app's core action. -->
-  <button class="nav-scan" onclick="triggerFilePicker()" aria-label="Scan">
+  <button class="nav-scan" onclick="startMultiScan()" aria-label="Scan">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 8.5V6.5A2.5 2.5 0 0 1 6.5 4h2M15.5 4h2A2.5 2.5 0 0 1 20 6.5v2M20 15.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M8.5 20h-2A2.5 2.5 0 0 1 4 17.5v-2"/>
       <path d="M12 7.2l1.15 3.15L16.3 11.5l-3.15 1.15L12 15.8l-1.15-3.15L7.7 11.5l3.15-1.15z" fill="currentColor" stroke="none"/>
@@ -808,6 +823,10 @@
     </button>
   </div>
 </nav>
+
+<div class="overlay" id="shotSheet" onclick="if(event.target===this) cancelMultiScan()">
+  <div class="sheet shot-sheet" id="shotSheetContent"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -940,6 +959,9 @@ const translations = {
     noSearchResults:'No matching products',
     comingSoon:'Coming soon',
     noUrgentItems:'Nothing expiring in the next 3 days 👍',
+    analyzeNow:'Analyze now',
+    addAngle:(n)=>`Add another angle (${n}/3)`,
+    addAngleHint:'Another side of the same product — e.g. where the date is printed',
     mixedDates:(n, d)=>`${n} different dates · nearest ${d}`,
     demoTry:'Try a demo first',
     demoLink:'or try a demo',
@@ -1029,6 +1051,9 @@ const translations = {
     noSearchResults:'ما فيه منتجات مطابقة',
     comingSoon:'قريبًا',
     noUrgentItems:'ما فيه شي ينتهي خلال ٣ أيام 👍',
+    analyzeNow:'حلّل الآن',
+    addAngle:(n)=>`أضف زاوية ثانية (${n}/3)`,
+    addAngleHint:'جهة ثانية من نفس المنتج — مثل مكان التاريخ',
     mixedDates:(n, d)=>`${n === 2 ? 'تاريخين مختلفين' : `${n} تواريخ مختلفة`} · أقربها ${d}`,
     demoTry:'جرّب مثال أولًا',
     demoLink:'أو جرّب مثال',
@@ -1118,6 +1143,9 @@ const translations = {
     noSearchResults:'No hay productos que coincidan',
     comingSoon:'Próximamente',
     noUrgentItems:'Nada caduca en los próximos 3 días 👍',
+    analyzeNow:'Analizar ahora',
+    addAngle:(n)=>`Añadir otro ángulo (${n}/3)`,
+    addAngleHint:'Otro lado del mismo producto — p. ej. donde está la fecha',
     mixedDates:(n, d)=>`${n} fechas distintas · la más próxima ${d}`,
     demoTry:'Probar un ejemplo primero',
     demoLink:'o prueba un ejemplo',
@@ -1386,11 +1414,7 @@ async function signOutCloud(){
 async function migrateLocalItemsToCloud(){
   const realItems = currentItems.filter(it => !it.demo);
   if(!realItems.length) return;
-  const rows = realItems.map(it => ({
-    id: it.id, user_id: currentUser.id, name: it.name,
-    category: it.category, expiry_date: it.expiryDate, from_label: !!it.fromLabel,
-  }));
-  await sb.from('items').upsert(rows);
+  await upsertItems(realItems);
 }
 
 async function loadItemsFromCloud(){
@@ -1399,6 +1423,7 @@ async function loadItemsFromCloud(){
   currentItems = (data || []).map(row => ({
     id: row.id, name: row.name, category: row.category,
     expiryDate: row.expiry_date, fromLabel: row.from_label,
+    ...(safeThumb(row.image_thumbnail) ? { thumbnail: row.image_thumbnail } : {}),
   }));
   render(false);
   maybeNotifyUrgentItems();
@@ -1406,13 +1431,33 @@ async function loadItemsFromCloud(){
 
 // Called after every local add/edit/remove — mirrors the change to the cloud
 // when signed in, no-ops silently when not (pure localStorage mode).
+function itemToRow(it, withThumb = true){
+  const row = {
+    id: it.id, user_id: currentUser.id, name: it.name,
+    category: it.category, expiry_date: it.expiryDate, from_label: !!it.fromLabel,
+  };
+  if(withThumb) row.image_thumbnail = safeThumb(it.thumbnail);
+  return row;
+}
+
+// Until the image_thumbnail column exists, retry without it so the item
+// itself is never lost.
+function isMissingThumbColumn(error){
+  return !!error && /image_thumbnail/.test(`${error.message || ''} ${error.details || ''}`);
+}
+
+async function upsertItems(items){
+  let { error } = await sb.from('items').upsert(items.map(it => itemToRow(it)));
+  if(isMissingThumbColumn(error)){
+    ({ error } = await sb.from('items').upsert(items.map(it => itemToRow(it, false))));
+  }
+  return { error };
+}
+
 async function syncItemToCloud(item){
   if(!currentUser) return;
   try{
-    const { error } = await sb.from('items').upsert({
-      id: item.id, user_id: currentUser.id, name: item.name,
-      category: item.category, expiry_date: item.expiryDate, from_label: !!item.fromLabel,
-    });
+    const { error } = await upsertItems([item]);
     if(error) throw error;
     showToast('Saved to cloud successfully', 3000);
   }catch(error){
@@ -1767,7 +1812,7 @@ function itemRow(it, t, i, sub){
   return `
     <div class="item${sub ? ' sub-item' : ''}" style="animation-delay:${i*0.04}s">
       <div class="status-dot ${statusFor(days)}"></div>
-      ${sub ? '' : `<div class="item-icon">${productIcon(it)}</div>`}
+      ${sub ? '' : `<div class="item-icon${safeThumb(it.thumbnail) ? ' has-photo' : ''}">${itemIconHtml(it)}</div>`}
       <div class="item-main">
         <div class="item-name" onclick="openItemEditor('${it.id}')">${it.name[currentLang]}</div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
@@ -1828,6 +1873,7 @@ function groupRow(g, t, i){
   const it = g.lead;
   const days = daysUntil(it.expiryDate);
   const open = expandedGroups.has(g.key);
+  const photoItem = g.items.find(x => safeThumb(x.thumbnail));
   // Different dates: say so, and name the nearest one (the one that matters
   // for the alert) instead of hiding the difference.
   const sublabel = g.dateCount > 1
@@ -1838,7 +1884,7 @@ function groupRow(g, t, i){
   return `
     <div class="item group-row${open ? ' open' : ''}" style="animation-delay:${i*0.04}s">
       <div class="status-dot ${statusFor(days)}"></div>
-      <div class="item-icon">${productIcon(it)}<span class="qty-badge">×${g.items.length}</span></div>
+      <div class="item-icon${photoItem && safeThumb(photoItem.thumbnail) ? ' has-photo' : ''}">${itemIconHtml(photoItem || it)}<span class="qty-badge">×${g.items.length}</span></div>
       <div class="item-main" data-key="${escapeAttr(g.key)}" onclick="toggleGroup(this.dataset.key)" role="button" aria-expanded="${open}">
         <div class="item-name">${it.name[currentLang]}
           <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -1923,7 +1969,7 @@ function handleFile(event){
 
   setScanBusy(true);
 
-  runAIAnalysis(file);
+  runAIAnalysis([file]);
 }
 
 // Resize + compress to a reasonable size before sending to the vision model —
@@ -1969,17 +2015,36 @@ async function fetchWithTimeout(url, options, timeoutMs){
   }
 }
 
-async function runAIAnalysis(file){
+// Several angles of one product go up together in one request (counted as
+// one scan). Each is downscaled so the whole request stays well under the
+// 4.5MB Vercel / 4MB Groq limits; a single photo keeps full 2048px detail.
+const MULTI_SHOT_MAX_BYTES = 3.5 * 1024 * 1024;
+
+async function encodeShots(files){
+  if(files.length === 1) return [await fileToResizedBase64(files[0])];
+  for(const [dim, q] of [[1600, 0.82], [1280, 0.75], [1024, 0.7]]){
+    const list = await Promise.all(files.map(f => fileToResizedBase64(f, dim, q)));
+    const bytes = list.reduce((sum, b) => sum + Math.round(b.length * 3 / 4), 0);
+    if(bytes <= MULTI_SHOT_MAX_BYTES) return list;
+  }
+  return Promise.all(files.map(f => fileToResizedBase64(f, 800, 0.65)));
+}
+
+async function runAIAnalysis(files){
   bumpUsage('scan');
+  lastShotCount = files.length;
+  // Thumbnail for the list comes from the first photo (kept only if the scan
+  // turns out to be a single product — see finishAIResult).
+  pendingThumbnail = await makeThumbnail(files[0]);
   try{
-    const base64 = await fileToResizedBase64(file);
-    console.log(`[runAIAnalysis] sending image, base64 length ${base64.length}`);
-    lastScannedImageBase64 = base64;
+    const images = await encodeShots(files);
+    console.log(`[runAIAnalysis] sending ${images.length} image(s)`);
+    lastScannedImageBase64 = images[0];
 
     const response = await fetchWithTimeout("/api/analyze", {
       method: "POST",
       headers: apiHeaders(),
-      body: JSON.stringify({ image: base64 })
+      body: JSON.stringify(images.length > 1 ? { images } : { image: images[0] })
     }, ANALYZE_TIMEOUT_MS);
 
     const data = await response.json();
@@ -2013,6 +2078,123 @@ async function runAIAnalysis(file){
     lastRawText = String(err);
     finishAIResult(null, true, err.message);
   }
+}
+
+// --- Product photo thumbnails ---
+// A 150px centre-cropped JPEG data URL (~6-10KB) saved with the item and in
+// the items.image_thumbnail column. Items without one (manual, receipt,
+// demo, or added before this feature) show the icon fallback.
+let pendingThumbnail = null;
+let lastShotCount = 1;
+const THUMB_MAX_CHARS = 28000; // DB check constraint allows < 30000
+
+function makeThumbnail(file, size = 150){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      let url = canvas.toDataURL('image/jpeg', 0.6);
+      if(url.length > THUMB_MAX_CHARS) url = canvas.toDataURL('image/jpeg', 0.4);
+      resolve(url.length > THUMB_MAX_CHARS ? null : url);
+    };
+    img.onerror = () => resolve(null);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// Only well-formed image data URLs are ever put into an <img src>.
+function safeThumb(url){
+  return typeof url === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(url) ? url : null;
+}
+
+function itemIconHtml(it){
+  const thumb = safeThumb(it && it.thumbnail);
+  return thumb ? `<img class="item-photo" src="${thumb}" alt="">` : productIcon(it);
+}
+
+// --- Multi-angle scan (green bottom button) ---
+// After the first photo a sheet offers "Analyze now" or "Add another angle"
+// (up to 3 photos of the same product); all are sent in one request. The
+// black Scan Item button keeps the instant single-photo flow (e.g. receipts).
+const MAX_SHOTS = 3;
+let multiShots = [];
+
+function startMultiScan(){
+  if(!checkUsageLimit('scan', SCAN_DAILY_LIMIT)) return;
+  multiShots = [];
+  document.getElementById('multiShotInput').click();
+}
+
+function handleMultiShot(event){
+  const file = event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  if(multiShots.length < MAX_SHOTS) multiShots.push({ file, url: URL.createObjectURL(file) });
+  renderShotSheet();
+}
+
+function addAnotherAngle(){
+  if(multiShots.length >= MAX_SHOTS) return;
+  document.getElementById('multiShotInput').click();
+}
+
+function removeShot(i){
+  const [shot] = multiShots.splice(i, 1);
+  if(shot) URL.revokeObjectURL(shot.url);
+  if(multiShots.length === 0) cancelMultiScan();
+  else renderShotSheet();
+}
+
+function cancelMultiScan(){
+  multiShots.forEach(s => URL.revokeObjectURL(s.url));
+  multiShots = [];
+  document.getElementById('shotSheet').classList.remove('show');
+}
+
+function renderShotSheet(){
+  const t = translations[currentLang];
+  const n = multiShots.length;
+  document.getElementById('shotSheetContent').innerHTML = `
+    <div class="shot-strip">
+      ${multiShots.map((s, i) => `
+        <div class="shot-thumb">
+          <img src="${s.url}" alt="">
+          <button class="shot-remove" onclick="removeShot(${i})" aria-label="remove">✕</button>
+        </div>`).join('')}
+    </div>
+    <button class="scan-btn" onclick="analyzeShots()">${t.analyzeNow}</button>
+    <button class="scan-btn secondary" onclick="addAnotherAngle()" ${n >= MAX_SHOTS ? 'disabled' : ''}>＋ ${t.addAngle(n)}</button>
+    <div class="shot-hint">${t.addAngleHint}</div>
+    <button class="close-sheet" onclick="cancelMultiScan()">${t.cancelBtn}</button>
+  `;
+  document.getElementById('shotSheet').classList.add('show');
+}
+
+function analyzeShots(){
+  if(!multiShots.length) return;
+  const files = multiShots.map(s => s.file);
+  const previewUrl = multiShots[0].url;
+  multiShots.slice(1).forEach(s => URL.revokeObjectURL(s.url));
+  multiShots = [];
+  document.getElementById('shotSheet').classList.remove('show');
+
+  dismissSecondPhotoHint();
+  const t = translations[currentLang];
+  document.getElementById('previewWrap').innerHTML = `
+    <div class="preview-wrap">
+      <img src="${previewUrl}" alt="item preview">
+      <div class="scan-line"></div>
+    </div>
+  `;
+  document.getElementById('processingWrap').innerHTML = `
+    <div class="processing-label" id="procLabel">${t.processing}</div>
+  `;
+  document.getElementById('previewWrap').scrollIntoView({ behavior:'smooth', block:'center' });
+  setScanBusy(true);
+  runAIAnalysis(files);
 }
 
 // --- Demo scan ---
@@ -2166,6 +2348,11 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
     };
   });
 
+  // Photo thumbnail only for a single product: one receipt photo says nothing
+  // about each of its items, so those keep the icon fallback.
+  if(newItems.length === 1 && pendingThumbnail) newItems[0].thumbnail = pendingThumbnail;
+  pendingThumbnail = null;
+
   // Scans accumulate into one running list (a fridge inventory), not replace it.
   // The first real scan clears any demo items.
   currentItems = [...currentItems.filter(it => !it.demo), ...newItems];
@@ -2183,7 +2370,8 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   // Single item, no printed date found (estimated_days was used) — offer to
   // scan another angle in case the date is on a side this photo didn't show.
   // Skipped for multi-item results (receipts), which don't have "another side".
-  if(newItems.length === 1 && !newItems[0].fromLabel && lastScannedImageBase64){
+  // (Not after 3 angles were already sent — there's no further angle to add.)
+  if(newItems.length === 1 && !newItems[0].fromLabel && lastScannedImageBase64 && lastShotCount < 3){
     showSecondPhotoHint(newItems[0].id);
   }
 }
@@ -2474,11 +2662,20 @@ function closeRecipeModal(){
 // --- Persistent storage (localStorage) — items survive app close/reopen ---
 const STORAGE_KEY = 'freshtrack_items_v1';
 
+// If thumbnails push localStorage over its quota (~5MB in Safari), drop them
+// from the oldest items in the saved copy until it fits — items themselves
+// are never dropped, and the cloud copy keeps its photos.
 function saveItems(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentItems));
-  } catch(e){
-    console.warn('Could not save items:', e);
+  const copy = currentItems.map(it => ({ ...it }));
+  for(let i = 0; i <= copy.length; i++){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(copy));
+      return;
+    } catch(e){
+      const next = copy.findIndex(it => it.thumbnail);
+      if(next === -1){ console.warn('Could not save items:', e); return; }
+      delete copy[next].thumbnail;
+    }
   }
 }
 
