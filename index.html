@@ -667,6 +667,25 @@
     background:radial-gradient(circle at 32% 28%, #4A715C, #395B48 62%, #2F4C3C);
     box-shadow:0 10px 20px rgba(57,91,72,0.38), inset 0 1px 0 rgba(255,255,255,0.18);
   }
+
+  /* ===== Grouped items (×N) ===== */
+  .item-icon{ position:relative; }
+  .qty-badge{
+    position:absolute; bottom:-5px; right:-7px; min-width:20px; height:17px; padding:0 4px;
+    border-radius:9px; background:#2B2B2B; color:#fff; border:2px solid var(--card);
+    font-size:9.5px; font-weight:700; line-height:13px; text-align:center;
+  }
+  [dir="rtl"] .qty-badge{ right:auto; left:-7px; }
+  .qty-badge{ direction:ltr; unicode-bidi:isolate; } /* keep "×3", not "3×", in Arabic */
+  .group-row .item-main{ cursor:pointer; }
+  .group-row .item-name{ display:flex; align-items:center; gap:4px; }
+  .group-chevron{ width:15px; height:15px; color:#A0A0A0; flex-shrink:0; transition:transform .2s ease; }
+  .group-row.open .group-chevron{ transform:rotate(180deg); }
+  .group-row.open{ border-bottom-color:transparent; }
+  .group-expand{ background:#F7F4EC; border-bottom:1px solid rgba(142,142,142,0.35); }
+  .group-expand .sub-item{ padding-inline-start:30px; border-bottom-color:rgba(142,142,142,0.2); }
+  .group-expand .sub-item:last-child{ border-bottom:none; }
+  .group-expand .sub-item .item-name{ font-size:14px; font-weight:600; }
 </style>
 </head>
 <body id="body">
@@ -921,6 +940,7 @@ const translations = {
     noSearchResults:'No matching products',
     comingSoon:'Coming soon',
     noUrgentItems:'Nothing expiring in the next 3 days 👍',
+    mixedDates:(n, d)=>`${n} different dates · nearest ${d}`,
     demoTry:'Try a demo first',
     demoLink:'or try a demo',
     demoBadge:'Demo',
@@ -1009,6 +1029,7 @@ const translations = {
     noSearchResults:'ما فيه منتجات مطابقة',
     comingSoon:'قريبًا',
     noUrgentItems:'ما فيه شي ينتهي خلال ٣ أيام 👍',
+    mixedDates:(n, d)=>`${n === 2 ? 'تاريخين مختلفين' : `${n} تواريخ مختلفة`} · أقربها ${d}`,
     demoTry:'جرّب مثال أولًا',
     demoLink:'أو جرّب مثال',
     demoBadge:'مثال',
@@ -1097,6 +1118,7 @@ const translations = {
     noSearchResults:'No hay productos que coincidan',
     comingSoon:'Próximamente',
     noUrgentItems:'Nada caduca en los próximos 3 días 👍',
+    mixedDates:(n, d)=>`${n} fechas distintas · la más próxima ${d}`,
     demoTry:'Probar un ejemplo primero',
     demoLink:'o prueba un ejemplo',
     demoBadge:'Ejemplo',
@@ -1614,16 +1636,21 @@ function render(noMatchFound, customMessage){
     return;
   }
 
-  const urgent = visible.filter(it => daysUntil(it.expiryDate) <= 3).sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate));
-  const rest = visible.filter(it => daysUntil(it.expiryDate) > 3);
+  // Same-name, same-category items collapse into one row (display only —
+  // every item is still stored separately). A group sorts and sections by
+  // its most urgent item (group.lead).
+  const groups = buildGroups(visible);
+  const byLead = (a,b) => daysUntil(a.lead.expiryDate) - daysUntil(b.lead.expiryDate);
+  const urgent = groups.filter(g => daysUntil(g.lead.expiryDate) <= 3).sort(byLead);
+  const rest = groups.filter(g => daysUntil(g.lead.expiryDate) > 3);
 
   const byCategory = {};
-  rest.forEach(it=>{
-    const cat = it.category || 'pantry';
+  rest.forEach(g=>{
+    const cat = g.lead.category || 'pantry';
     if(!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push(it);
+    byCategory[cat].push(g);
   });
-  Object.values(byCategory).forEach(arr => arr.sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate)));
+  Object.values(byCategory).forEach(arr => arr.sort(byLead));
 
   let html = '';
 
@@ -1632,7 +1659,7 @@ function render(noMatchFound, customMessage){
       <span class="group-dot urgent"></span>
       <span>${urgentLabel[currentLang]}</span>
     </div>`;
-    html += `<div class="group-card">${urgent.map((it,i) => itemRow(it, t, i)).join('')}</div></section>`;
+    html += `<div class="group-card">${urgent.map((g,i) => groupRow(g, t, i)).join('')}</div></section>`;
   }
 
   Object.keys(categoryMeta).forEach(catKey=>{
@@ -1642,7 +1669,7 @@ function render(noMatchFound, customMessage){
       <span class="group-icon">${categoryMeta[catKey].icon}</span>
       <span>${categoryMeta[catKey].name[currentLang]}</span>
     </div>`;
-    html += `<div class="group-card">${items.map((it,i) => itemRow(it, t, i)).join('')}</div></section>`;
+    html += `<div class="group-card">${items.map((g,i) => groupRow(g, t, i)).join('')}</div></section>`;
   });
 
   list.innerHTML = html;
@@ -1707,35 +1734,121 @@ function productIcon(it){
   return (categoryMeta[it.category] || categoryMeta.pantry).icon;
 }
 
-function itemRow(it, t, i){
-  const days = daysUntil(it.expiryDate);
-  const usedTitle = currentLang==='ar' ? 'استخدمته' : currentLang==='es' ? 'Usado' : 'Mark as used';
-  const trashTitle = currentLang==='ar' ? 'رميته (تلف)' : currentLang==='es' ? 'Desechado' : 'Mark as wasted';
-
-  // Explicit, always-visible distinction — not just a hover tooltip — between a
-  // date actually printed on packaging and a category-average guess. Someone
-  // deciding whether to eat something should never mistake one for the other.
-  const sublabel = it.demo
+// Explicit, always-visible distinction — not just a hover tooltip — between a
+// date actually printed on packaging and a category-average guess. Someone
+// deciding whether to eat something should never mistake one for the other.
+function itemSublabel(it, t){
+  return it.demo
     ? `🧪 ${t.demoBadge} · ≈ ${t.estimatedLabel}`
     : it.fromLabel
       ? `${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
       : `≈ ${t.estimatedLabel}`;
+}
+
+function itemActions(id){
+  const usedTitle = currentLang==='ar' ? 'استخدمته' : currentLang==='es' ? 'Usado' : 'Mark as used';
+  const trashTitle = currentLang==='ar' ? 'رميته (تلف)' : currentLang==='es' ? 'Desechado' : 'Mark as wasted';
+  return `
+      <div class="item-actions">
+        <button class="item-action-btn used" onclick="resolveItem('${id}', 'used')" title="${usedTitle}" aria-label="used"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+        <button class="item-action-btn trash" onclick="resolveItem('${id}', 'wasted')" title="${trashTitle}" aria-label="wasted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
+      </div>`;
+}
+
+// `sub`: a line inside an expanded group — no product icon, and the date is
+// always spelled out so the grouped items can be told apart.
+function itemRow(it, t, i, sub){
+  const days = daysUntil(it.expiryDate);
+  const sublabel = sub && !it.fromLabel
+    ? `≈ ${t.estimatedLabel} · ${t.today(new Date(it.expiryDate))}`
+    : itemSublabel(it, t);
   const sublabelClass = it.fromLabel ? 'verified' : 'estimated';
 
   return `
-    <div class="item" style="animation-delay:${i*0.04}s">
+    <div class="item${sub ? ' sub-item' : ''}" style="animation-delay:${i*0.04}s">
       <div class="status-dot ${statusFor(days)}"></div>
-      <div class="item-icon">${productIcon(it)}</div>
+      ${sub ? '' : `<div class="item-icon">${productIcon(it)}</div>`}
       <div class="item-main">
         <div class="item-name" onclick="openItemEditor('${it.id}')">${it.name[currentLang]}</div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
       </div>
       <div class="item-days ${statusFor(days)}">${it.fromLabel ? '' : '≈ '}${t.dayLabel(days)}</div>
-      <div class="item-actions">
-        <button class="item-action-btn used" onclick="resolveItem('${it.id}', 'used')" title="${usedTitle}" aria-label="used"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
-        <button class="item-action-btn trash" onclick="resolveItem('${it.id}', 'wasted')" title="${trashTitle}" aria-label="wasted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
-      </div>
+      ${itemActions(it.id)}
     </div>
+  `;
+}
+
+// --- Grouping same products (display only) ---
+// Key: English name (normalized) + category; demo items never mix with real
+// ones. Identical items (same expiry day) and same-name items with different
+// dates both collapse to one row with a ×N badge; the row shows the most
+// urgent date, and tapping it expands to every item with its own date.
+const expandedGroups = new Set();
+
+function groupKeyFor(it){
+  return (it.demo ? 'demo:' : '') + normalizeSearch((it.name && it.name.en) || '') + '|' + (it.category || 'pantry');
+}
+
+function expiryDayKey(it){
+  const d = new Date(it.expiryDate);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function buildGroups(items){
+  const map = new Map();
+  items.forEach(it => {
+    const key = groupKeyFor(it);
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(it);
+  });
+  return [...map.entries()].map(([key, list]) => {
+    list.sort((a,b) => daysUntil(a.expiryDate) - daysUntil(b.expiryDate));
+    return {
+      key,
+      items: list,
+      lead: list[0],
+      dateCount: new Set(list.map(expiryDayKey)).size,
+    };
+  });
+}
+
+function toggleGroup(key){
+  if(expandedGroups.has(key)) expandedGroups.delete(key);
+  else expandedGroups.add(key);
+  render(false);
+}
+
+function escapeAttr(str){
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function groupRow(g, t, i){
+  if(g.items.length === 1) return itemRow(g.lead, t, i);
+
+  const it = g.lead;
+  const days = daysUntil(it.expiryDate);
+  const open = expandedGroups.has(g.key);
+  // Different dates: say so, and name the nearest one (the one that matters
+  // for the alert) instead of hiding the difference.
+  const sublabel = g.dateCount > 1
+    ? t.mixedDates(g.dateCount, t.today(new Date(it.expiryDate)))
+    : itemSublabel(it, t);
+  const sublabelClass = g.dateCount > 1 ? 'estimated' : (it.fromLabel ? 'verified' : 'estimated');
+
+  return `
+    <div class="item group-row${open ? ' open' : ''}" style="animation-delay:${i*0.04}s">
+      <div class="status-dot ${statusFor(days)}"></div>
+      <div class="item-icon">${productIcon(it)}<span class="qty-badge">×${g.items.length}</span></div>
+      <div class="item-main" data-key="${escapeAttr(g.key)}" onclick="toggleGroup(this.dataset.key)" role="button" aria-expanded="${open}">
+        <div class="item-name">${it.name[currentLang]}
+          <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
+      </div>
+      <div class="item-days ${statusFor(days)}">${it.fromLabel ? '' : '≈ '}${t.dayLabel(days)}</div>
+      ${itemActions(it.id)}
+    </div>
+    ${open ? `<div class="group-expand">${g.items.map((x, j) => itemRow(x, t, j, true)).join('')}</div>` : ''}
   `;
 }
 
