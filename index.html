@@ -633,6 +633,40 @@
   .status-dot.urgent{ background:#FF3B30; animation:none; box-shadow:0 0 0 3px #FFE3E1; }
   .item-days.soon{ background:#FFF4D1; color:#9A6A00; }
   .fresh-bar .seg-soon{ background:#F5B700; }
+
+  /* ===== Warm palette =====
+     Colours only — layout, type and structure are unchanged. */
+  :root{
+    --bg:#F4F1E8;
+    --app-bg:#F4F1E8;
+    --primary:#395B48;
+    --green:#395B48;
+    --mint:#E1EEE6;
+    --green-bg:#E1EEE6;
+    --ink-soft:#8E8E8E;
+    --hairline:#8E8E8E;
+    --card:#FDFCF8;
+    --search-bg:#EAE6DA;
+  }
+  .scan-btn{ background:#2B2B2B; }
+  .scan-btn:active{ background:#3A3A3A; }
+  .scan-btn.secondary{ background:#FDFCF8; box-shadow:0 4px 12px rgba(60,50,30,0.06); }
+  .item-days.fresh{ background:#E1EEE6; color:#395B48; }
+  .status-dot.fresh{ background:#395B48; }
+  .fresh-bar{ background:#E4DFD2; }
+  .item-icon{ background:#F4F1E8; }
+  .item-action-btn, .item-action-btn.used, .item-action-btn.trash{ color:#A0A0A0; }
+  .item{ border-bottom-color:rgba(142,142,142,0.35); }
+  .divider{ border-top-color:#8E8E8E; }
+  .app-header.scrolled, .search-wrap{ box-shadow:0 1px 0 rgba(142,142,142,0.35); }
+  .search-wrap.pinned{ box-shadow:none; }
+  .nav-shape path, .nav-fill{ fill:#FDFCF8; background:#FDFCF8; }
+  .nav-item{ color:#8E8E8E; }
+  .nav-item.active{ color:#395B48; }
+  .nav-scan{
+    background:radial-gradient(circle at 32% 28%, #4A715C, #395B48 62%, #2F4C3C);
+    box-shadow:0 10px 20px rgba(57,91,72,0.38), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
 </style>
 </head>
 <body id="body">
