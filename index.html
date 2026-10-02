@@ -35,7 +35,7 @@
 </script>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
   :root{
     --paper:#FAF6EE;
@@ -51,34 +51,31 @@
     --blue-bg:#E3EDF5;
     --rose-bg:#F6E4E2;
     --tan-bg:#F1E6D2;
+    --app-bg:#FBFAF7;
+    --field-bg:#EFEDE8;
+    --hairline:#E6E2D8;
   }
 
   *{box-sizing:border-box; margin:0; padding:0;}
 
   body{
-    background:
-      radial-gradient(ellipse 900px 500px at 20% -10%, rgba(45,106,79,0.08), transparent),
-      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(217,113,31,0.06), transparent),
-      #E8E2D0;
+    background:var(--app-bg);
     font-family:'IBM Plex Sans', sans-serif;
     color:var(--ink);
     min-height:100vh;
     display:flex;
     justify-content:center;
-    padding:32px 12px;
+    /* bottom padding keeps the last item clear of the fixed bottom nav */
+    padding:0 0 calc(96px + env(safe-area-inset-bottom));
   }
   body.lang-ar{ font-family:'IBM Plex Sans Arabic', sans-serif; }
 
-  .phone{ width:100%; max-width:380px; }
+  .phone{ width:100%; max-width:480px; }
 
   .receipt{
-    background:var(--paper);
+    background:var(--app-bg);
     position:relative;
-    padding:28px 20px 40px;
-    box-shadow:0 16px 36px rgba(33,29,24,0.20);
-    background-image:repeating-linear-gradient(transparent, transparent 27px, rgba(33,29,24,0.035) 28px);
-    animation:printIn .6s cubic-bezier(.22,.68,.35,1) both;
-    transform-origin:top center;
+    padding:0 18px 24px;
   }
 
   @keyframes printIn{
@@ -86,17 +83,62 @@
     100%{ clip-path:inset(0 0 0% 0); opacity:1; transform:translateY(0); }
   }
 
-  @media (prefers-reduced-motion: reduce){
-    .receipt{ animation:none; }
-  }
 
   .perf-top, .perf-bottom{
+    display:none;
     position:absolute; left:0; right:0; height:12px;
     background:radial-gradient(circle at 10px 6px, #E8E2D0 6px, transparent 7px) repeat-x;
     background-size:20px 12px;
   }
   .perf-top{ top:-1px; }
   .perf-bottom{ bottom:-1px; transform:rotate(180deg); }
+
+  /* Sticky header: brand + bell stay visible while the list scrolls. Negative
+     side margins stretch it over the receipt's padding so content scrolling
+     underneath is fully hidden. */
+  .app-header{
+    position:sticky; top:0; z-index:6;
+    margin:0 -18px; padding:max(10px, env(safe-area-inset-top)) 18px 10px;
+    background:var(--app-bg);
+    display:grid; grid-template-columns:40px 1fr 40px; align-items:center;
+  }
+  .app-header.scrolled{ box-shadow:0 1px 0 var(--hairline); }
+  .app-header .brand{ grid-column:2; margin:0; }
+  .header-btn{
+    position:relative; width:40px; height:40px; border:none; background:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; border-radius:50%; color:var(--ink);
+  }
+  .header-btn:active{ background:rgba(33,29,24,0.07); }
+  .header-btn svg{ width:22px; height:22px; }
+  .bell-badge{
+    position:absolute; top:4px; right:3px; min-width:17px; height:17px; padding:0 4px;
+    border-radius:9px; background:var(--red); color:#fff; font-size:10px; font-weight:700;
+    display:none; align-items:center; justify-content:center; line-height:1;
+    border:2px solid var(--app-bg);
+  }
+  .bell-badge.show{ display:flex; }
+  /* Search drops in under the header once the user scrolls. Positioned
+     absolutely so showing/hiding it never shifts the list (no scroll jump). */
+  .search-wrap{
+    position:absolute; left:0; right:0; top:100%;
+    padding:0 18px 10px; background:var(--app-bg);
+    opacity:0; transform:translateY(-6px); pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease;
+    box-shadow:0 1px 0 var(--hairline);
+  }
+  .search-wrap.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  /* While a query is typed the bar joins the header's flow instead of
+     floating: a short filtered list scrolls the page back to the top, where
+     a floating bar would cover the date/fresh-bar rows. */
+  .search-wrap.pinned{ grid-column:1 / -1; position:static; padding:8px 0 2px; box-shadow:none; transform:none; }
+  .search-input{
+    width:100%; padding:10px 12px 10px 36px; border-radius:12px;
+    border:1px solid transparent; background-color:#F1F0EC; font:inherit; font-size:14px; color:var(--ink);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236E6858' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-size:16px; background-position:12px center;
+  }
+  [dir="rtl"] .search-input{ padding:10px 36px 10px 12px; background-position:calc(100% - 12px) center; }
+  .search-input:focus{ outline:none; border-color:var(--green); }
 
   .top-row{ display:flex; justify-content:flex-end; }
   .gear-btn{
@@ -105,16 +147,18 @@
     border-radius:50%;
     transition:transform .2s ease, color .15s ease, background .15s ease;
   }
-  .gear-btn:hover{ color:var(--ink); transform:rotate(25deg); background:rgba(33,29,24,0.06); }
+  .gear-btn:hover{ color:var(--ink); transform:rotate(-12deg); background:rgba(33,29,24,0.06); }
   .gear-btn:active{ background:rgba(33,29,24,0.1); }
   .gear-btn svg{ width:19px; height:19px; }
 
   .brand{ text-align:center; margin-top:-6px; margin-bottom:4px; }
+  .brand .brand-mark{ font-size:24px; }
+  .brand .brand-sub{ font-size:10px; }
   .brand-mark{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:27px; letter-spacing:1px; }
   .brand-mark .fresh-part{ color:var(--green); }
   .brand-sub{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); letter-spacing:1px; margin-top:2px; }
 
-  .divider{ border:none; border-top:1.5px dashed var(--line); margin:16px 0; }
+  .divider{ border:none; border-top:1.5px dashed var(--hairline); margin:16px 0 4px; }
 
   .meta-row{
     display:flex; justify-content:space-between;
@@ -151,8 +195,10 @@
   .scan-btn:disabled{ opacity:.55; cursor:default; transform:none; box-shadow:none; }
   .scan-btn svg{ width:18px; height:18px; flex-shrink:0; }
   .scan-btn.secondary{
-    background:none; color:var(--ink); border:1px solid var(--line); margin-top:10px;
+    background:#fff; color:var(--ink); border:1px solid #EEECE6; margin-top:12px;
+    box-shadow:0 4px 12px rgba(33,29,24,0.10);
   }
+  .scan-btn.secondary:active{ background:#f6f5f1; }
 
   #fileInput{ display:none; }
 
@@ -223,7 +269,7 @@
 
   .item{
     display:flex; align-items:center; gap:10px; padding:12px 0;
-    border-bottom:1px dotted var(--line);
+    border-bottom:1px solid var(--hairline);
     opacity:0; transform:translateY(6px);
     animation:riseIn .35s ease forwards;
   }
@@ -288,6 +334,36 @@
   #recipeContent ul{ padding-inline-start:20px; margin-top:6px; }
 
   .empty{ text-align:center; padding:36px 10px 10px; color:var(--ink-soft); font-size:13.5px; line-height:1.9; }
+
+  /* Bottom navigation — lives outside .receipt, whose entry animation
+     leaves a transform that would otherwise break position:fixed. */
+  .bottom-nav{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px; z-index:8; /* matches .phone */
+    display:grid; grid-template-columns:repeat(5, 1fr); align-items:end;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    background:#fff;
+    box-shadow:0 -1px 0 #F0EEE8, 0 -6px 18px rgba(33,29,24,0.05);
+  }
+  .nav-item{
+    background:none; border:none; cursor:pointer; font:inherit;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:6px 0 2px; font-size:10.5px; color:var(--ink-soft);
+  }
+  .nav-item svg{ width:22px; height:22px; }
+  .nav-item.active{ color:var(--green); font-weight:600; }
+  .nav-scan{
+    justify-self:center; width:54px; height:54px; margin-top:-30px;
+    border-radius:50%; border:none; cursor:pointer;
+    background:var(--green); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 14px rgba(45,106,79,0.35);
+    transition:transform .12s ease;
+  }
+  .nav-scan svg{ width:25px; height:25px; }
+  .nav-item.active svg path.fill{ fill:currentColor; stroke:none; }
+  .nav-scan:active{ transform:scale(0.94); }
+  .nav-scan:disabled{ opacity:.6; cursor:default; transform:none; }
   .demo-link{
     display:inline-block; margin-top:6px; background:none; border:none; padding:4px 8px;
     color:var(--green); font:inherit; font-weight:600; text-decoration:underline; cursor:pointer;
@@ -314,7 +390,7 @@
   }
 
   .toast{
-    position:fixed; bottom:24px; left:50%;
+    position:fixed; bottom:calc(92px + env(safe-area-inset-bottom)); left:50%;
     transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--paper);
     padding:10px 18px; border-radius:24px; font-size:13px;
@@ -371,6 +447,192 @@
   .onboard-icon{ font-size:44px; margin-bottom:14px; }
   .onboard-title{ font-size:17px; font-weight:700; margin-bottom:8px; }
   .onboard-text{ font-size:13.5px; color:var(--ink-soft); line-height:1.7; }
+
+
+  /* ===== FreshTrack UI spec =====
+     Minimal, clean mobile UI: Inter, #F9F9F9 canvas, deep-forest-green
+     accent, white rounded cards with very soft shadows. Overrides the older
+     receipt-era rules above. */
+  :root{
+    --bg:#F9F9F9;
+    --app-bg:#F9F9F9;
+    --card:#FFFFFF;
+    --primary:#2F5D4E;
+    --green:#2F5D4E;
+    --mint:#E6F4EA;
+    --green-bg:#E6F4EA;
+    --amber:#B25E09;
+    --amber-bg:#FDF0DC;
+    --red:#FF3B30;
+    --red-bg:#FFE9E7;
+    --ink:#1A1A1A;
+    --ink-soft:#8E8E93;
+    --hairline:#EFEFF2;
+    --search-bg:#F2F2F7;
+    --shadow-soft:0 4px 12px rgba(0,0,0,0.05);
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.lang-ar{ font-family:'IBM Plex Sans Arabic', 'Inter', sans-serif; }
+  .receipt{ background:var(--bg); padding:0 16px 24px; }
+
+  .brand-mark, .brand-sub, .meta-row, .group-header, .item-sublabel, .item-days,
+  .processing-label, .no-match{ font-family:inherit; }
+
+  /* Header (sticky) with the search pill always visible under it */
+  .app-header{ background:var(--bg); margin:0 -16px; padding:max(10px, env(safe-area-inset-top)) 16px 12px; }
+  .app-header.scrolled{ box-shadow:0 1px 0 var(--hairline); }
+  .header-btn{ color:var(--ink); }
+  .brand .brand-mark{ font-size:27px; font-weight:800; letter-spacing:-0.6px; color:var(--ink); }
+  .brand-mark .fresh-part{ color:var(--primary); }
+  .brand .brand-sub{ font-size:10.5px; font-weight:500; letter-spacing:2.8px; color:var(--ink-soft); margin-top:2px; }
+  .lang-ar .brand .brand-sub{ letter-spacing:0; font-size:11px; }
+  .bell-badge{ background:var(--red); top:3px; right:2px; border-color:var(--bg); }
+
+  .search-wrap{ padding:2px 16px 12px; background:var(--bg); box-shadow:0 1px 0 var(--hairline); }
+  .search-wrap.pinned{ grid-column:1 / -1; padding:12px 0 0; background:none; box-shadow:none; }
+  .search-input{
+    border-radius:20px; border:none; background-color:var(--search-bg);
+    padding:11px 16px 11px 40px; font-size:15px; background-position:14px center;
+  }
+  [dir="rtl"] .search-input{ padding:11px 40px 11px 16px; background-position:calc(100% - 14px) center; }
+  .search-input::placeholder{ color:var(--ink-soft); }
+
+  /* Summary: date / count, progress bar, legend, dashed divider */
+  .meta-row{ margin-top:16px; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .meta-row #itemCount{ color:var(--ink-soft); }
+  .fresh-bar{ height:6px; border-radius:99px; margin-top:8px; background:var(--hairline); }
+  .fresh-bar .seg-fresh{ background:var(--primary); }
+  .fresh-bar .seg-soon{ background:#F5A524; }
+  .fresh-bar .seg-urgent{ background:var(--red); }
+  #freshCounts{ font-size:13px; font-weight:500; margin-top:10px; color:var(--ink); }
+  .divider{ display:block; border:none; border-top:1.5px dashed #DADADF; margin:16px 0 0; }
+
+  .recipe-btn{ border:none !important; border-radius:12px; background:var(--mint); color:var(--primary); font-weight:600; }
+
+  /* Primary actions */
+  .scan-btn{
+    border-radius:12px; padding:15px 16px; margin-top:16px; font-size:15px; font-weight:600;
+    background:#1A1A1A; color:#fff; box-shadow:var(--shadow-soft);
+  }
+  .scan-btn:active{ background:#333; }
+  .scan-btn.secondary{
+    background:var(--card); color:var(--ink); border:none; margin-top:12px; box-shadow:0 4px 12px rgba(0,0,0,0.07);
+  }
+
+  /* List: section headers + white rounded cards */
+  .items{ margin-top:24px; }
+  .group{ margin-bottom:20px; }
+  .group-header{
+    font-size:11.5px; font-weight:600; letter-spacing:0.8px; text-transform:uppercase;
+    color:var(--ink-soft); margin:0 4px 8px; padding:0; gap:6px;
+  }
+  .urgent-header{ color:var(--red); }
+  .lang-ar .group-header{ letter-spacing:0; font-size:12.5px; }
+  .group-icon{ width:18px; height:18px; font-size:12px; background:none !important; }
+  .group-card{ background:var(--card); border-radius:12px; box-shadow:var(--shadow-soft); overflow:hidden; }
+
+  .item{ padding:12px 16px; gap:12px; border-bottom:1px solid var(--hairline); }
+  .item:last-child{ border-bottom:none; }
+  .item-icon{
+    width:32px; height:32px; flex-shrink:0; border-radius:10px;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+    background:#F4F5F2;
+  }
+  .item-name{ font-size:15px; font-weight:700; color:var(--ink); letter-spacing:-0.1px; }
+  .item-sublabel, .item-sublabel.verified, .item-sublabel.estimated{
+    font-size:12px; font-weight:400; color:var(--ink-soft); margin-top:2px; letter-spacing:0;
+  }
+  .item-days{ font-size:12px; font-weight:600; border-radius:8px; padding:5px 9px; letter-spacing:0; }
+  .item-days.fresh{ background:var(--mint); color:var(--primary); }
+  .item-days.soon{ background:var(--amber-bg); color:var(--amber); }
+  .item-days.urgent{ background:var(--red-bg); color:var(--red); }
+  .item-actions{ gap:0; }
+  .item-action-btn{ color:#C7C7CC; width:30px; height:30px; display:flex; align-items:center; justify-content:center; }
+  .item-action-btn svg{ width:19px; height:19px; }
+  .item-action-btn.used:hover{ color:var(--primary); background:var(--mint); }
+  .item-action-btn.trash:hover{ color:var(--red); background:var(--red-bg); }
+
+  .empty, .no-match{ background:var(--card); border-radius:12px; box-shadow:var(--shadow-soft); padding:28px 16px; }
+
+  /* Bottom tab bar: white, soft upward shadow, raised green + button */
+  .bottom-nav{
+    background:#fff; border-top:none; box-shadow:0 -4px 16px rgba(0,0,0,0.06);
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+  }
+  .nav-item{ color:var(--ink-soft); font-size:11px; font-weight:500; }
+  .nav-item.active{ color:var(--primary); font-weight:600; }
+  .nav-item{ position:relative; }
+  .nav-dot{
+    position:absolute; top:4px; left:calc(50% + 7px); width:8px; height:8px; border-radius:50%;
+    background:var(--red); border:1.5px solid #fff;
+  }
+  .nav-scan{
+    width:58px; height:58px; margin-top:-34px; border:none;
+    background:var(--primary); box-shadow:0 8px 18px rgba(47,93,78,0.35);
+  }
+  .nav-scan svg{ width:26px; height:26px; }
+
+  .toast{ border-radius:12px; }
+
+  /* ===== Curved-notch bottom nav =====
+     The white bar is an SVG path (drawNavShape) with a concave notch that
+     cradles the raised centre button; a drop-shadow filter on the nav
+     follows the curve. Outer items sit toward the edges and inner items
+     toward the button, so the row reads as arcing around it. */
+  .bottom-nav{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    height:calc(66px + env(safe-area-inset-bottom));
+    padding:0; background:none !important; box-shadow:none !important; border:none !important;
+    -webkit-backdrop-filter:none; backdrop-filter:none;
+    filter:drop-shadow(0 -3px 8px rgba(0,0,0,0.06));
+  }
+  .nav-shape{ position:absolute; top:0; left:0; width:100%; height:66px; overflow:visible; }
+  .nav-shape path{ fill:#fff; }
+  .nav-fill{ position:absolute; left:0; right:0; top:65px; bottom:0; background:#fff; }
+  .nav-side{
+    position:relative; flex:1; display:flex; justify-content:space-between; align-items:flex-start;
+    padding-top:12px;
+  }
+  .nav-side-start{ padding-inline:14px 10px; }
+  .nav-side-end{ padding-inline:10px 14px; }
+  .nav-item{
+    flex:0 0 auto; min-width:58px; padding:0; gap:4px;
+    font-size:10.5px; font-weight:500; color:#8E8E93;
+  }
+  .nav-item svg{ width:23px; height:23px; }
+  .nav-item.active{ color:#2F5D4E; font-weight:600; }
+  /* inner items (next to the button) sit a little lower, following the curve */
+  .nav-side-start .nav-item:last-child,
+  .nav-side-end .nav-item:first-child{ transform:translateY(3px); }
+  .nav-icon-wrap{ position:relative; display:flex; }
+  .nav-dot{ top:-1px; left:auto; right:-2px; }
+  .nav-scan{
+    position:relative; flex:0 0 auto; align-self:flex-start;
+    width:62px; height:62px; margin:-34px 6px 0;
+    border-radius:50%; border:none; color:#fff;
+    background:radial-gradient(circle at 32% 28%, #3E7A66, #2F5D4E 62%, #264D40);
+    box-shadow:0 10px 20px rgba(47,93,78,0.38), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .nav-scan svg{ width:28px; height:28px; }
+  .toast{ bottom:calc(104px + env(safe-area-inset-bottom)); }
+  body{ padding-bottom:calc(110px + env(safe-area-inset-bottom)); }
+
+  /* status dot beside each product: green fresh, yellow soon, red urgent */
+  .item .status-dot{ width:9px; height:9px; margin-inline-end:-4px; }
+  /* dot + icon + badge share the row: tighten so names don't wrap early */
+  .item{ gap:10px; padding:12px 14px; }
+  .item-icon{ width:30px; height:30px; font-size:18px; border-radius:9px; }
+  .item-days{ padding:5px 8px; }
+  .item-action-btn{ width:28px; }
+  .status-dot.fresh{ background:#34A853; }
+  .status-dot.soon{ background:#F5B700; }
+  .status-dot.urgent{ background:#FF3B30; animation:none; box-shadow:0 0 0 3px #FFE3E1; }
+  .item-days.soon{ background:#FFF4D1; color:#9A6A00; }
+  .fresh-bar .seg-soon{ background:#F5B700; }
 </style>
 </head>
 <body id="body">
@@ -387,18 +649,25 @@
   <div class="receipt">
     <div class="perf-top"></div>
 
-    <div class="top-row">
-      <button class="gear-btn" onclick="openSettings()" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-      </button>
-    </div>
+    <div class="app-header" id="appHeader">
+    <button class="header-btn" onclick="openSettings()" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
 
     <div class="brand">
       <div class="brand-mark" data-t="brandMark"><span class="fresh-part">Fresh</span>Track</div>
       <div class="brand-sub" data-t="brandSub">EXPIRY TRACKER</div>
+    </div>
+
+    <button class="header-btn" onclick="goToUrgentItems()" aria-label="Expiring soon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="bell-badge" id="bellBadge"></span>
+    </button>
+
+    <div class="search-wrap" id="searchWrap">
+      <input type="search" class="search-input" id="searchInput" data-t-placeholder="searchPlaceholder"
+        placeholder="Search products" autocomplete="off" oninput="onSearchInput(this.value)">
+    </div>
     </div>
 
     <div class="meta-row">
@@ -407,7 +676,7 @@
     </div>
 
     <div id="freshBar" class="fresh-bar"></div>
-    <div id="freshCounts" style="font-size:11px; font-family:'IBM Plex Mono', monospace; margin-top:6px;"></div>
+    <div id="freshCounts"></div>
     <button id="recipeBtn" class="recipe-btn" onclick="requestRecipe()" style="display:none;">
       <span data-t="suggestRecipe">💡 Suggest a recipe</span>
     </button>
@@ -419,9 +688,10 @@
         <path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/>
         <line x1="7" y1="12" x2="17" y2="12"/>
       </svg>
-      <span data-t="scanBtn">Scan Receipt</span>
+      <span data-t="scanBtn">Scan Item</span>
     </button>
     <button class="scan-btn secondary" id="manualAddBtn" onclick="openItemEditor(null)" data-t="addManually">Add Manually</button>
+
     <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)">
     <input type="file" id="secondPhotoInput" accept="image/*" capture="environment" onchange="handleSecondPhoto(event)" style="display:none;">
 
@@ -443,6 +713,48 @@
   </div>
 
   </div>
+
+<nav class="bottom-nav" id="bottomNav">
+  <!-- White bar with a concave notch around the centre button; the path is
+       recomputed for the screen width by drawNavShape(). -->
+  <svg class="nav-shape" id="navShape" aria-hidden="true"><path id="navShapePath"/></svg>
+  <div class="nav-fill"></div>
+
+  <div class="nav-side nav-side-start">
+    <button class="nav-item active" onclick="window.scrollTo({ top:0, behavior:'smooth' })">
+      <svg viewBox="0 0 24 24"><path class="fill" d="M11.3 2.7a1 1 0 0 1 1.4 0l8.6 8.1c.6.6.2 1.7-.7 1.7H19V20a1 1 0 0 1-1 1h-3.5v-5.5h-5V21H6a1 1 0 0 1-1-1v-7.5H3.4c-.9 0-1.3-1.1-.7-1.7z"/></svg>
+      <span data-t="navHome">Home</span>
+    </button>
+    <button class="nav-item" onclick="comingSoon()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>
+      <span data-t="navApps">Apps</span>
+    </button>
+  </div>
+
+  <!-- disabled together with #scanBtn while a photo is analyzed (setScanBusy).
+       Icon: scan frame with an AI sparkle — scanning is the app's core action. -->
+  <button class="nav-scan" onclick="triggerFilePicker()" aria-label="Scan">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 8.5V6.5A2.5 2.5 0 0 1 6.5 4h2M15.5 4h2A2.5 2.5 0 0 1 20 6.5v2M20 15.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M8.5 20h-2A2.5 2.5 0 0 1 4 17.5v-2"/>
+      <path d="M12 7.2l1.15 3.15L16.3 11.5l-3.15 1.15L12 15.8l-1.15-3.15L7.7 11.5l3.15-1.15z" fill="currentColor" stroke="none"/>
+      <circle cx="16.6" cy="7.4" r="0.95" fill="currentColor" stroke="none"/>
+    </svg>
+  </button>
+
+  <div class="nav-side nav-side-end">
+    <button class="nav-item" onclick="comingSoon()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><line x1="12" y1="13" x2="12" y2="21"/></svg>
+      <span data-t="navProducts">Products</span>
+    </button>
+    <button class="nav-item" onclick="comingSoon()">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="10" r="3.2"/><path d="M6.2 18.6c1.3-2.2 3.4-3.4 5.8-3.4s4.5 1.2 5.8 3.4"/></svg>
+        <span class="nav-dot"></span>
+      </span>
+      <span data-t="navProfile">My Profile</span>
+    </button>
+  </div>
+</nav>
 
 <div class="toast" id="toast"></div>
 
@@ -567,6 +879,14 @@ const translations = {
       { icon:'📸', title:'Welcome to FreshTrack', text:'Snap a photo of any product — AI reads the expiry date and tracks it for you' },
     ],
     onboardStart:'Start scanning',
+    navHome:'Home',
+    navApps:'Apps',
+    navProducts:'Products',
+    navProfile:'My Profile',
+    searchPlaceholder:'Search products',
+    noSearchResults:'No matching products',
+    comingSoon:'Coming soon',
+    noUrgentItems:'Nothing expiring in the next 3 days 👍',
     demoTry:'Try a demo first',
     demoLink:'or try a demo',
     demoBadge:'Demo',
@@ -647,6 +967,14 @@ const translations = {
       { icon:'📸', title:'مرحبًا بك في FreshTrack', text:'صوّر أي منتج — الذكاء الاصطناعي يقرأ تاريخ الصلاحية ويتابعه لك' },
     ],
     onboardStart:'ابدأ المسح',
+    navHome:'الرئيسية',
+    navApps:'التطبيقات',
+    navProducts:'المنتجات',
+    navProfile:'حسابي',
+    searchPlaceholder:'ابحث عن منتج',
+    noSearchResults:'ما فيه منتجات مطابقة',
+    comingSoon:'قريبًا',
+    noUrgentItems:'ما فيه شي ينتهي خلال ٣ أيام 👍',
     demoTry:'جرّب مثال أولًا',
     demoLink:'أو جرّب مثال',
     demoBadge:'مثال',
@@ -727,6 +1055,14 @@ const translations = {
       { icon:'📸', title:'Bienvenido a FreshTrack', text:'Toma una foto de cualquier producto — la IA lee la fecha de caducidad y la controla por ti' },
     ],
     onboardStart:'Empezar a escanear',
+    navHome:'Inicio',
+    navApps:'Apps',
+    navProducts:'Productos',
+    navProfile:'Mi perfil',
+    searchPlaceholder:'Buscar productos',
+    noSearchResults:'No hay productos que coincidan',
+    comingSoon:'Próximamente',
+    noUrgentItems:'Nada caduca en los próximos 3 días 👍',
     demoTry:'Probar un ejemplo primero',
     demoLink:'o prueba un ejemplo',
     demoBadge:'Ejemplo',
@@ -1102,6 +1438,10 @@ function applyLang(lang){
     if(key === 'brandMark') return; // two-tone markup lives directly in HTML, name stays constant across languages
     if(typeof t[key] === 'string') el.textContent = t[key];
   });
+  document.querySelectorAll('[data-t-placeholder]').forEach(el=>{
+    const key = el.getAttribute('data-t-placeholder');
+    if(typeof t[key] === 'string') el.placeholder = t[key];
+  });
 
   document.getElementById('todayDate').textContent = t.today(new Date());
   buildLangList();
@@ -1122,12 +1462,97 @@ function buildLangList(){
   `).join('');
 }
 
+// --- Search (shown under the sticky header once the user scrolls) ---
+let searchQuery = '';
+
+// Case/accent-insensitive across all three languages; for Arabic, also treats
+// أ/إ/آ as ا, ة as ه and ى as ي and ignores diacritics ("لبنه" finds "لبنة").
+function normalizeSearch(str){
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .trim();
+}
+
+function onSearchInput(value){
+  searchQuery = value;
+  render(false);
+  updateHeaderOnScroll();
+}
+
+// The search bar appears once the user scrolls down to the product list
+// (the list's top reaches the header) and hides again near the top. The
+// 60px hysteresis avoids flicker at the edge; a typed query keeps it visible.
+function updateHeaderOnScroll(){
+  const header = document.getElementById('appHeader');
+  header.classList.toggle('scrolled', window.scrollY > 8);
+  const wrap = document.getElementById('searchWrap');
+  const shown = wrap.classList.contains('show');
+  const listTop = document.getElementById('itemsList').getBoundingClientRect().top - header.offsetHeight;
+  wrap.classList.toggle('pinned', !!searchQuery);
+  if(searchQuery) wrap.classList.add('show');
+  else if(!shown && listTop < 40) wrap.classList.add('show');
+  else if(shown && listTop > 100) wrap.classList.remove('show');
+}
+window.addEventListener('scroll', updateHeaderOnScroll, { passive:true });
+
+// Scan Item and the bottom-nav camera both start a scan; disable both while
+// a photo is being analyzed.
+function setScanBusy(busy){
+  document.querySelectorAll('#scanBtn, .nav-scan').forEach(btn => { btn.disabled = busy; });
+}
+
+// 🔔 badge = real (non-demo) items expiring within 3 days.
+function updateBellBadge(){
+  const badge = document.getElementById('bellBadge');
+  if(!badge) return;
+  const n = currentItems.filter(it => !it.demo && daysUntil(it.expiryDate) <= 3).length;
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.classList.toggle('show', n > 0);
+}
+
+function goToUrgentItems(){
+  const header = document.querySelector('.urgent-header');
+  if(!header){
+    showToast(translations[currentLang].noUrgentItems);
+    return;
+  }
+  const offset = document.getElementById('appHeader').offsetHeight + 8;
+  window.scrollTo({ top: header.getBoundingClientRect().top + window.scrollY - offset, behavior:'smooth' });
+}
+
+// Bottom-nav background: a 66px-high white bar whose top edge dips into a
+// smooth concave notch (radius R) centred under the scan button.
+function drawNavShape(){
+  const nav = document.getElementById('bottomNav');
+  const path = document.getElementById('navShapePath');
+  if(!nav || !path) return;
+  const w = nav.clientWidth, h = 66, c = w / 2, R = 39, lip = 18;
+  path.setAttribute('d', [
+    `M0 0 H${c - R - lip}`,
+    `C${c - R - 4} 0 ${c - R} 4 ${c - R + 3} 12`,
+    `A${R} ${R} 0 0 0 ${c + R - 3} 12`,
+    `C${c + R} 4 ${c + R + 4} 0 ${c + R + lip} 0`,
+    `H${w} V${h} H0 Z`,
+  ].join(' '));
+}
+window.addEventListener('resize', drawNavShape);
+
+function comingSoon(){
+  showToast(translations[currentLang].comingSoon);
+}
+
 function render(noMatchFound, customMessage){
   const t = translations[currentLang];
   const list = document.getElementById('itemsList');
   const empty = document.getElementById('emptyState');
   document.getElementById('itemCount').innerHTML = `${currentItems.length} <span data-t="items">${t.items}</span>`;
   updateFreshBar();
+  updateBellBadge();
 
   const recipeBtn = document.getElementById('recipeBtn');
   if(recipeBtn){
@@ -1138,15 +1563,25 @@ function render(noMatchFound, customMessage){
   if(currentItems.length === 0){
     list.innerHTML = '';
     if(noMatchFound){
-      list.innerHTML = `<div class="no-match">${customMessage || t.noMatch}</div>`;
+      list.innerHTML = `<div class="no-match">${customMessage || t.noMatch}
+        <br><button class="demo-link" onclick="openItemEditor(null)">＋ ${t.addManually}</button></div>`;
     } else {
       list.appendChild(empty);
     }
     return;
   }
 
-  const urgent = currentItems.filter(it => daysUntil(it.expiryDate) <= 3).sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate));
-  const rest = currentItems.filter(it => daysUntil(it.expiryDate) > 3);
+  const q = normalizeSearch(searchQuery);
+  const visible = q
+    ? currentItems.filter(it => Object.values(it.name || {}).some(n => normalizeSearch(n).includes(q)))
+    : currentItems;
+  if(visible.length === 0){
+    list.innerHTML = `<div class="no-match">${t.noSearchResults}</div>`;
+    return;
+  }
+
+  const urgent = visible.filter(it => daysUntil(it.expiryDate) <= 3).sort((a,b)=>daysUntil(a.expiryDate)-daysUntil(b.expiryDate));
+  const rest = visible.filter(it => daysUntil(it.expiryDate) > 3);
 
   const byCategory = {};
   rest.forEach(it=>{
@@ -1159,21 +1594,21 @@ function render(noMatchFound, customMessage){
   let html = '';
 
   if(urgent.length){
-    html += `<div class="group-header urgent-header">
+    html += `<section class="group"><div class="group-header urgent-header">
       <span class="group-dot urgent"></span>
       <span>${urgentLabel[currentLang]}</span>
     </div>`;
-    html += urgent.map((it,i) => itemRow(it, t, i)).join('');
+    html += `<div class="group-card">${urgent.map((it,i) => itemRow(it, t, i)).join('')}</div></section>`;
   }
 
   Object.keys(categoryMeta).forEach(catKey=>{
     const items = byCategory[catKey];
     if(!items || !items.length) return;
-    html += `<div class="group-header">
-      <span class="group-icon" style="background:${categoryMeta[catKey].bg}">${categoryMeta[catKey].icon}</span>
+    html += `<section class="group"><div class="group-header">
+      <span class="group-icon">${categoryMeta[catKey].icon}</span>
       <span>${categoryMeta[catKey].name[currentLang]}</span>
     </div>`;
-    html += items.map((it,i) => itemRow(it, t, i)).join('');
+    html += `<div class="group-card">${items.map((it,i) => itemRow(it, t, i)).join('')}</div></section>`;
   });
 
   list.innerHTML = html;
@@ -1218,6 +1653,26 @@ function daysUntil(expiryDate){
   return Math.round((d - today) / (1000*60*60*24));
 }
 
+// Small product icon for the list: matched from the English name, falling
+// back to the category icon. Stand-in until real item photos are added.
+const PRODUCT_ICONS = [
+  [/milk|laban|ayran/, '🥛'], [/egg/, '🥚'], [/yog(h)?urt|labneh|labne/, '🥣'],
+  [/cheese|cascaval|feta|halloumi/, '🧀'], [/butter/, '🧈'], [/cream/, '🍶'],
+  [/chicken|poultry|turkey/, '🍗'], [/beef|steak|lamb|mince|meat/, '🥩'], [/fish|salmon|shrimp/, '🐟'],
+  [/tuna|can(ned)?\b|beans/, '🥫'], [/bread|toast|pita|bun|baguette/, '🍞'], [/croissant|pastr/, '🥐'],
+  [/rice/, '🍚'], [/pasta|spaghetti|noodle|macaroni/, '🍝'], [/tomato/, '🍅'], [/potato/, '🥔'],
+  [/spinach|lettuce|salad|greens|kale/, '🥬'], [/cucumber/, '🥒'], [/carrot/, '🥕'], [/onion/, '🧅'],
+  [/apple/, '🍎'], [/banana/, '🍌'], [/orange|citrus/, '🍊'], [/lemon|lime/, '🍋'], [/strawberr|berr/, '🍓'],
+  [/grape/, '🍇'], [/avocado/, '🥑'], [/water/, '💧'], [/juice/, '🧃'], [/coffee/, '☕'],
+];
+
+function productIcon(it){
+  const name = String((it.name && it.name.en) || '').toLowerCase();
+  const hit = PRODUCT_ICONS.find(([re]) => re.test(name));
+  if(hit) return hit[1];
+  return (categoryMeta[it.category] || categoryMeta.pantry).icon;
+}
+
 function itemRow(it, t, i){
   const days = daysUntil(it.expiryDate);
   const usedTitle = currentLang==='ar' ? 'استخدمته' : currentLang==='es' ? 'Usado' : 'Mark as used';
@@ -1229,21 +1684,22 @@ function itemRow(it, t, i){
   const sublabel = it.demo
     ? `🧪 ${t.demoBadge} · ≈ ${t.estimatedLabel}`
     : it.fromLabel
-      ? `📅 ${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
+      ? `${t.verifiedLabel} · ${t.today(new Date(it.expiryDate))}`
       : `≈ ${t.estimatedLabel}`;
   const sublabelClass = it.fromLabel ? 'verified' : 'estimated';
 
   return `
     <div class="item" style="animation-delay:${i*0.04}s">
       <div class="status-dot ${statusFor(days)}"></div>
+      <div class="item-icon">${productIcon(it)}</div>
       <div class="item-main">
         <div class="item-name" onclick="openItemEditor('${it.id}')">${it.name[currentLang]}</div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
       </div>
       <div class="item-days ${statusFor(days)}">${it.fromLabel ? '' : '≈ '}${t.dayLabel(days)}</div>
       <div class="item-actions">
-        <button class="item-action-btn used" onclick="resolveItem('${it.id}', 'used')" title="${usedTitle}" aria-label="used">✓</button>
-        <button class="item-action-btn trash" onclick="resolveItem('${it.id}', 'wasted')" title="${trashTitle}" aria-label="wasted">🗑</button>
+        <button class="item-action-btn used" onclick="resolveItem('${it.id}', 'used')" title="${usedTitle}" aria-label="used"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+        <button class="item-action-btn trash" onclick="resolveItem('${it.id}', 'wasted')" title="${trashTitle}" aria-label="wasted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
       </div>
     </div>
   `;
@@ -1318,8 +1774,7 @@ function handleFile(event){
     <div class="processing-label" id="procLabel">${t.processing}</div>
   `;
 
-  const scanBtn = document.getElementById('scanBtn');
-  scanBtn.disabled = true;
+  setScanBusy(true);
 
   runAIAnalysis(file);
 }
@@ -1465,7 +1920,7 @@ function runDemoScan(){
   document.getElementById('processingWrap').innerHTML = `
     <div class="processing-label">${t.processing}</div>
   `;
-  document.getElementById('scanBtn').disabled = true;
+  setScanBusy(true);
   document.getElementById('previewWrap').scrollIntoView({ behavior:'smooth', block:'center' });
 
   setTimeout(()=>{
@@ -1487,7 +1942,7 @@ function runDemoScan(){
 
     document.getElementById('previewWrap').innerHTML = '';
     document.getElementById('processingWrap').innerHTML = '';
-    document.getElementById('scanBtn').disabled = false;
+    setScanBusy(false);
     render(false);
     showToast(t.demoDone, 5000);
     track('item_added', { source: 'demo', count: demoItems.length, from_label: 0 });
@@ -1512,7 +1967,7 @@ function plausibleExpiry(dateStr){
 function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   document.getElementById('previewWrap').innerHTML = '';
   document.getElementById('processingWrap').innerHTML = '';
-  document.getElementById('scanBtn').disabled = false;
+  setScanBusy(false);
   document.getElementById('fileInput').value = '';
 
   const t = translations[currentLang];
@@ -2026,6 +2481,7 @@ function onboardNext(){
 loadItems();
 applyLang('en');
 initSupabase();
+drawNavShape();
 trackDailyOpen();
 maybeNotifyUrgentItems();
 maybeShowOnboarding();
