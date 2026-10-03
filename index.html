@@ -702,6 +702,52 @@
   .shot-hint{ font-size:12.5px; color:var(--ink-soft); margin-top:10px; }
 
   .profile-title{ font-size:20px; font-weight:800; letter-spacing:-0.3px; color:var(--ink); margin-bottom:14px; }
+
+  /* ===== Summary cards + side-by-side actions ===== */
+  .summary-carousel{
+    display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none;
+    margin:14px -16px 0; padding:0 16px; gap:0; scroll-padding:0 16px;
+  }
+  .summary-carousel::-webkit-scrollbar{ display:none; }
+  .summary-card{
+    flex:0 0 100%; scroll-snap-align:center; min-height:118px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:20px 22px; border-radius:20px; background:#D9E7DD; color:#2E4A3B;
+    margin-inline-end:0;
+  }
+  .summary-card + .summary-card{ margin-inline-start:12px; }
+  .card-big{ font-size:34px; font-weight:800; letter-spacing:-1px; line-height:1.05; color:#24392D; }
+  .card-label{ font-size:15px; font-weight:700; color:#2E4A3B; margin-top:2px; }
+  .card-sub{ font-size:14px; font-weight:500; color:#4F6A5B; margin-top:4px; }
+  .card-art{ width:64px; height:64px; color:#395B48; opacity:.75; flex-shrink:0; }
+  .card-text-wide{ flex:1; }
+  .card-dot{ width:44px; height:44px; border-radius:50%; flex-shrink:0; }
+  .card-dot.fresh{ background:#395B48; box-shadow:0 0 0 8px rgba(57,91,72,.15); }
+  .card-dot.soon{ background:#F5B700; box-shadow:0 0 0 8px rgba(245,183,0,.2); }
+  .card-soon{ background:#F6EBCB; color:#6B5310; cursor:pointer; }
+  .card-soon .card-big, .card-soon .card-label{ color:#5A4508; }
+  .card-soon .card-sub{ color:#86702E; }
+  .card-soon.has-urgent .card-dot{ background:#FF3B30; box-shadow:0 0 0 8px rgba(255,59,48,.18); }
+  .card-overview .fresh-bar{ margin-top:12px; background:rgba(255,255,255,.6); }
+  #freshCounts{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:13px; font-weight:600; }
+  .legend::before{ content:''; display:inline-block; width:8px; height:8px; border-radius:50%; margin-inline-end:6px; vertical-align:1px; }
+  .legend.urgent{ color:#C8372D; } .legend.urgent::before{ background:#FF3B30; }
+  .legend.soon{ color:#8A6400; }   .legend.soon::before{ background:#F5B700; }
+  .legend.fresh{ color:#395B48; }  .legend.fresh::before{ background:#395B48; }
+  .month-stats{ display:flex; gap:40px; margin-top:6px; }
+  .card-big.wasted{ color:#C8372D; }
+  .summary-dots{ display:flex; justify-content:center; gap:7px; margin-top:12px; }
+  .summary-dot{ width:7px; height:7px; border-radius:99px; border:none; padding:0; background:#CFCBBE; cursor:pointer; transition:width .2s ease, background .2s ease; }
+  .summary-dot.active{ width:22px; background:#395B48; }
+
+  .action-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .action-row .scan-btn, .action-row .scan-btn.secondary{
+    margin-top:0; background:#395B48; color:#fff; border:none; border-radius:16px;
+    padding:15px 10px; font-size:15px; box-shadow:0 6px 14px rgba(57,91,72,.25);
+  }
+  .action-row .scan-btn:active{ background:#2F4C3C; }
+  .recipe-btn{ margin-top:12px; }
+  .divider{ display:none; }
 </style>
 </head>
 <body id="body">
@@ -739,27 +785,70 @@
     </div>
     </div>
 
-    <div class="meta-row">
-      <span id="todayDate"></span>
-      <span id="itemCount">0 <span data-t="items">items</span></span>
+    <!-- Summary cards: swipe between today / expiring soon / fresh / overview /
+         this month. Values are filled by updateSummaryCards(). -->
+    <div class="summary-carousel" id="summaryCarousel">
+      <div class="summary-card card-today">
+        <div class="card-text">
+          <div class="card-big" id="todayDate"></div>
+          <div class="card-sub" id="itemCount">0 <span data-t="items">items</span></div>
+        </div>
+        <svg class="card-art" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 16V9a3 3 0 0 1 3-3h7M48 6h7a3 3 0 0 1 3 3v7M58 48v7a3 3 0 0 1-3 3h-7M16 58H9a3 3 0 0 1-3-3v-7"/>
+          <path d="M20 17h24v28l-4-2.5-4 2.5-4-2.5-4 2.5-4-2.5-4 2.5z" fill="currentColor" fill-opacity="0.18"/>
+          <line x1="25" y1="25" x2="39" y2="25"/><line x1="25" y1="31" x2="33" y2="31"/>
+          <path d="M33 37l3 3 6-7"/>
+        </svg>
+      </div>
+      <div class="summary-card card-soon" onclick="goToUrgentItems()">
+        <div class="card-text">
+          <div class="card-big" id="cardSoonCount">0</div>
+          <div class="card-label" data-t="cardSoonTitle">Expiring soon</div>
+          <div class="card-sub" data-t="cardSoonSub">Use within 3 days</div>
+        </div>
+        <div class="card-dot soon"></div>
+      </div>
+      <div class="summary-card card-fresh">
+        <div class="card-text">
+          <div class="card-big" id="cardFreshCount">0</div>
+          <div class="card-label" data-t="cardFreshTitle">Fresh</div>
+          <div class="card-sub" data-t="cardFreshSub">More than 3 days left</div>
+        </div>
+        <div class="card-dot fresh"></div>
+      </div>
+      <div class="summary-card card-overview">
+        <div class="card-text card-text-wide">
+          <div class="card-label"><span data-t="cardOverviewTitle">Overview</span> · <span id="cardTotalCount">0</span></div>
+          <div id="freshBar" class="fresh-bar"></div>
+          <div id="freshCounts"></div>
+        </div>
+      </div>
+      <div class="summary-card card-month">
+        <div class="card-text card-text-wide">
+          <div class="card-label" data-t="statsTitle">This month</div>
+          <div class="month-stats">
+            <div><div class="card-big" id="cardUsedCount">0</div><div class="card-sub" data-t="cardUsedLabel">Used</div></div>
+            <div><div class="card-big wasted" id="cardWastedCount">0</div><div class="card-sub" data-t="cardWastedLabel">Wasted</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="summary-dots" id="summaryDots"></div>
+
+    <div class="action-row">
+      <button class="scan-btn" id="scanBtn" onclick="triggerFilePicker()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/>
+          <line x1="7" y1="12" x2="17" y2="12"/>
+        </svg>
+        <span data-t="scanBtn">Scan Item</span>
+      </button>
+      <button class="scan-btn" id="manualAddBtn" onclick="openItemEditor(null)" data-t="addManually">Add Manually</button>
     </div>
 
-    <div id="freshBar" class="fresh-bar"></div>
-    <div id="freshCounts"></div>
     <button id="recipeBtn" class="recipe-btn" onclick="requestRecipe()" style="display:none;">
       <span data-t="suggestRecipe">💡 Suggest a recipe</span>
     </button>
-
-    <hr class="divider">
-
-    <button class="scan-btn" id="scanBtn" onclick="triggerFilePicker()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/>
-        <line x1="7" y1="12" x2="17" y2="12"/>
-      </svg>
-      <span data-t="scanBtn">Scan Item</span>
-    </button>
-    <button class="scan-btn secondary" id="manualAddBtn" onclick="openItemEditor(null)" data-t="addManually">Add Manually</button>
 
     <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)">
     <input type="file" id="secondPhotoInput" accept="image/*" capture="environment" onchange="handleSecondPhoto(event)" style="display:none;">
@@ -968,6 +1057,13 @@ const translations = {
     noSearchResults:'No matching products',
     comingSoon:'Coming soon',
     noUrgentItems:'Nothing expiring in the next 3 days 👍',
+    cardSoonTitle:'Expiring soon',
+    cardSoonSub:'Use within 3 days',
+    cardFreshTitle:'Fresh',
+    cardFreshSub:'More than 3 days left',
+    cardOverviewTitle:'Overview',
+    cardUsedLabel:'Used',
+    cardWastedLabel:'Wasted',
     cloudSaveFailed:"Couldn't sync to the cloud — it's saved on this device",
     analyzeNow:'Analyze now',
     addAngle:(n)=>`Add another angle (${n}/3)`,
@@ -1061,6 +1157,13 @@ const translations = {
     noSearchResults:'ما فيه منتجات مطابقة',
     comingSoon:'قريبًا',
     noUrgentItems:'ما فيه شي ينتهي خلال ٣ أيام 👍',
+    cardSoonTitle:'قريب الانتهاء',
+    cardSoonSub:'استخدمه خلال ٣ أيام',
+    cardFreshTitle:'طازج',
+    cardFreshSub:'باقي أكثر من ٣ أيام',
+    cardOverviewTitle:'نظرة عامة',
+    cardUsedLabel:'استُخدم',
+    cardWastedLabel:'انرمى',
     cloudSaveFailed:'ما قدرنا نحفظ في السحابة — محفوظ على هذا الجهاز',
     analyzeNow:'حلّل الآن',
     addAngle:(n)=>`أضف زاوية ثانية (${n}/3)`,
@@ -1154,6 +1257,13 @@ const translations = {
     noSearchResults:'No hay productos que coincidan',
     comingSoon:'Próximamente',
     noUrgentItems:'Nada caduca en los próximos 3 días 👍',
+    cardSoonTitle:'Caduca pronto',
+    cardSoonSub:'Úsalo en 3 días',
+    cardFreshTitle:'Fresco',
+    cardFreshSub:'Más de 3 días',
+    cardOverviewTitle:'Resumen',
+    cardUsedLabel:'Usados',
+    cardWastedLabel:'Desechados',
     cloudSaveFailed:'No se pudo sincronizar con la nube — está guardado en este dispositivo',
     analyzeNow:'Analizar ahora',
     addAngle:(n)=>`Añadir otro ángulo (${n}/3)`,
@@ -1654,6 +1764,46 @@ function drawNavShape(){
 }
 window.addEventListener('resize', drawNavShape);
 
+// --- Summary cards (swipeable, under the title) ---
+function updateSummaryCards(){
+  let soon = 0, fresh = 0;
+  currentItems.forEach(it => { if(daysUntil(it.expiryDate) <= 3) soon++; else fresh++; });
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+  set('cardSoonCount', soon);
+  set('cardFreshCount', fresh);
+  set('cardTotalCount', `${currentItems.length} ${translations[currentLang].items}`);
+  const stats = loadStats();
+  set('cardUsedCount', stats.usedCount);
+  set('cardWastedCount', stats.wastedCount);
+  document.querySelector('.card-soon')?.classList.toggle('has-urgent', soon > 0);
+}
+
+function setupSummaryCarousel(){
+  const track = document.getElementById('summaryCarousel');
+  const dots = document.getElementById('summaryDots');
+  if(!track || !dots) return;
+  const cards = track.children.length;
+  dots.innerHTML = Array.from({ length: cards }, (_, i) =>
+    `<button class="summary-dot${i === 0 ? ' active' : ''}" aria-label="${i + 1}" onclick="scrollSummaryTo(${i})"></button>`).join('');
+  track.addEventListener('scroll', () => {
+    // Active card = the one whose centre is closest to the track's centre.
+    // Works the same in LTR and RTL (scrollLeft semantics differ there).
+    const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
+    let i = 0, best = Infinity;
+    [...track.children].forEach((card, k) => {
+      const r = card.getBoundingClientRect();
+      const dist = Math.abs(r.left + r.width / 2 - mid);
+      if(dist < best){ best = dist; i = k; }
+    });
+    dots.querySelectorAll('.summary-dot').forEach((d, k) => d.classList.toggle('active', k === i));
+  }, { passive:true });
+}
+
+function scrollSummaryTo(i){
+  const card = document.getElementById('summaryCarousel').children[i];
+  if(card) card.scrollIntoView({ behavior:'smooth', inline:'center', block:'nearest' });
+}
+
 function comingSoon(){
   showToast(translations[currentLang].comingSoon);
 }
@@ -1665,6 +1815,7 @@ function render(noMatchFound, customMessage){
   document.getElementById('itemCount').innerHTML = `${currentItems.length} <span data-t="items">${t.items}</span>`;
   updateFreshBar();
   updateBellBadge();
+  updateSummaryCards();
 
   const recipeBtn = document.getElementById('recipeBtn');
   if(recipeBtn){
@@ -1757,10 +1908,10 @@ function updateFreshBar(){
   if(counts){
     const t = translations[currentLang];
     const parts = [];
-    if(urgent) parts.push(`<span style="color:var(--red)">🔴 ${urgent} ${t.countExpiring}</span>`);
-    if(soon) parts.push(`<span style="color:var(--amber)">🟠 ${soon} ${t.countSoon}</span>`);
-    if(fresh) parts.push(`<span style="color:var(--green)">🟢 ${fresh} ${t.countFresh}</span>`);
-    counts.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+    if(urgent) parts.push(`<span class="legend urgent">${urgent} ${t.countExpiring}</span>`);
+    if(soon) parts.push(`<span class="legend soon">${soon} ${t.countSoon}</span>`);
+    if(fresh) parts.push(`<span class="legend fresh">${fresh} ${t.countFresh}</span>`);
+    counts.innerHTML = parts.join('');
   }
 }
 
@@ -2839,6 +2990,7 @@ loadItems();
 applyLang('en');
 initSupabase();
 drawNavShape();
+setupSummaryCarousel();
 trackDailyOpen();
 maybeNotifyUrgentItems();
 maybeShowOnboarding();
