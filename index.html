@@ -1569,11 +1569,15 @@ async function migrateLocalItemsToCloud(){
 async function loadItemsFromCloud(){
   const { data, error } = await sb.from('items').select('*').order('expiry_date');
   if(error){ console.warn('Cloud load failed:', error); return; }
-  currentItems = (data || []).map(row => ({
+  // Demo items live only on this device (never synced) — keep them when the
+  // cloud copy replaces the local list, or they vanish on every launch.
+  const localDemo = currentItems.filter(it => it.demo);
+  currentItems = [...(data || []).map(row => ({
     id: row.id, name: row.name, category: row.category,
     expiryDate: row.expiry_date, fromLabel: row.from_label,
     ...(safeThumb(row.image_thumbnail) ? { thumbnail: row.image_thumbnail } : {}),
-  }));
+  })), ...localDemo];
+  saveItems();
   render(false);
   maybeNotifyUrgentItems();
 }
@@ -1850,7 +1854,6 @@ function comingSoon(){
 function render(noMatchFound, customMessage){
   const t = translations[currentLang];
   const list = document.getElementById('itemsList');
-  const empty = document.getElementById('emptyState');
   document.getElementById('itemCount').innerHTML = `${currentItems.length} <span data-t="items">${t.items}</span>`;
   updateFreshBar();
   updateBellBadge();
@@ -1868,7 +1871,14 @@ function render(noMatchFound, customMessage){
       list.innerHTML = `<div class="no-match">${customMessage || t.noMatch}
         <br><button class="demo-link" onclick="openItemEditor(null)">＋ ${t.addManually}</button></div>`;
     } else {
-      list.appendChild(empty);
+      // Rebuilt every time (not re-attached): the static #emptyState node is
+      // wiped by the first non-empty render, and re-appending it threw,
+      // leaving a blank list once the last item was gone.
+      list.innerHTML = `<div class="empty" id="emptyState">
+        <span class="empty-icon">🧾</span>
+        <span>${t.emptyText}</span>
+        <br><button class="demo-link" onclick="runDemoScan()">${t.demoLink}</button>
+      </div>`;
     }
     return;
   }
