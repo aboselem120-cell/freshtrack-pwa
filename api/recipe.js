@@ -45,9 +45,17 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Bound the prompt: at most 30 short item names (the client sends names of
+  // items expiring within 3 days; anything beyond this is not a real fridge).
+  const names = items.filter((n) => typeof n === 'string').slice(0, 30).map((n) => n.slice(0, 60));
+  if (names.length === 0) {
+    await send(400, { error: 'Missing "items" (array of item names)' });
+    return;
+  }
+
   const langName = { en: 'English', ar: 'Arabic', es: 'Spanish' }[language] || 'English';
 
-  const prompt = `These grocery items are about to expire: ${items.join(', ')}.
+  const prompt = `These grocery items are about to expire: ${names.join(', ')}.
 Suggest ONE simple, quick recipe that uses as many of them as possible (extra common pantry staples like salt, oil, water are fine to assume).
 Respond in ${langName}.
 Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:

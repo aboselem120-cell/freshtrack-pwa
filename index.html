@@ -7,8 +7,8 @@
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#211D18">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FreshTrack">
@@ -1330,6 +1330,7 @@ const VAPID_PUBLIC_KEY = 'BP2HLUTxAS9ddHUTU-nm6gm75vbEijdOX5MASmI7Z9Segy86KPDFEi
 
 let sb = null;
 let currentUser = null;
+let justSignedIn = false; // set by verifyOtpCode, consumed by onAuthStateChange
 
 function cloudConfigured(){
   return !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
@@ -1342,8 +1343,18 @@ function initSupabase(){
     currentUser = session ? session.user : null;
     markOwnerDevice(currentUser);
     renderAccountBox();
-    if(currentUser && event === 'SIGNED_IN'){
+    // supabase-js also emits SIGNED_IN when the tab regains focus. Uploading
+    // the local list each time re-created items deleted on another device
+    // (and raced pending deletions), so only do it right after the user
+    // actually signs in with a code (see verifyOtpCode).
+    if(currentUser && event === 'SIGNED_IN' && justSignedIn){
+      justSignedIn = false;
       migrateLocalItemsToCloud().then(loadItemsFromCloud);
+    } else if(currentUser && event === 'SIGNED_IN'){
+      // Refocus: refresh from the cloud (picks up other devices' changes),
+      // but not while an undo-able removal is pending, and after a short
+      // delay so deletions flushed when the app was hidden have landed.
+      setTimeout(() => { if(!pendingResolves.size) loadItemsFromCloud(); }, 800);
     }
   });
   sb.auth.getSession().then(({ data })=>{
@@ -1539,9 +1550,11 @@ async function verifyOtpCode(){
   const code = document.getElementById('authCode').value.trim();
   if(!email || !code) return;
   const t = translations[currentLang];
+  justSignedIn = true;
   const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
   const statusEl = document.getElementById('authStatus');
   if(error){
+    justSignedIn = false;
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `${t.codeError} (${error.message || 'unknown error'})`;
     return;
@@ -1572,11 +1585,11 @@ async function loadItemsFromCloud(){
   // Demo items live only on this device (never synced) — keep them when the
   // cloud copy replaces the local list, or they vanish on every launch.
   const localDemo = currentItems.filter(it => it.demo);
-  currentItems = [...(data || []).map(row => ({
+  currentItems = [...(data || []).map(row => sanitizeItem({
     id: row.id, name: row.name, category: row.category,
     expiryDate: row.expiry_date, fromLabel: row.from_label,
-    ...(safeThumb(row.image_thumbnail) ? { thumbnail: row.image_thumbnail } : {}),
-  })), ...localDemo];
+    thumbnail: row.image_thumbnail,
+  })).filter(Boolean), ...localDemo];
   saveItems();
   render(false);
   maybeNotifyUrgentItems();
@@ -1653,7 +1666,8 @@ async function subscribeToPush(){
     if(error) throw error;
   }catch(err){
     console.error('[subscribeToPush] failed', err);
-    showToast('Push subscription failed: ' + err.message);
+    lastRawText = 'Push subscription failed: ' + (err && err.message);
+    showToast(translations[currentLang].cloudSaveFailed, 4000);
   }
 }
 
@@ -1679,8 +1693,30 @@ function statusFor(days){
   return 'fresh';
 }
 
+const LANG_KEY = 'freshtrack_lang';
+
+// Saved choice, else the device language, else English.
+function initialLang(){
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    if(saved && translations[saved]) return saved;
+  } catch(e) {}
+  const device = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  return translations[device] ? device : 'en';
+}
+
+// The service worker can't read localStorage; keep the language where it can.
+function rememberLangForPush(lang){
+  if(!('caches' in window)) return;
+  caches.open('freshtrack-prefs')
+    .then(c => c.put('/__lang', new Response(lang)))
+    .catch(() => {});
+}
+
 function applyLang(lang){
   currentLang = lang;
+  try { localStorage.setItem(LANG_KEY, lang); } catch(e) {}
+  rememberLangForPush(lang);
   const t = translations[lang];
   document.getElementById('htmlRoot').setAttribute('lang', lang);
   document.getElementById('htmlRoot').setAttribute('dir', t.dir);
@@ -1964,6 +2000,20 @@ function updateFreshBar(){
   }
 }
 
+// Item ids are used inside onclick="...('id')" — only allow safe characters.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+function newItemId(){
+  return 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+}
+
+// <input type="date"> value (YYYY-MM-DD) for a date in LOCAL time.
+// (toISOString().slice(0,10) is the UTC day — one day early east of UTC,
+// so editing an item showed, and re-saved, the previous day.)
+function toLocalDateInput(d){
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function daysUntil(expiryDate){
   const today = new Date(); today.setHours(0,0,0,0);
   const d = new Date(expiryDate);
@@ -2025,7 +2075,7 @@ function itemRow(it, t, i, sub){
       <div class="status-dot ${statusFor(days)}"></div>
       ${sub ? '' : `<div class="item-icon${safeThumb(it.thumbnail) ? ' has-photo' : ''}">${itemIconHtml(it)}</div>`}
       <div class="item-main">
-        <div class="item-name" onclick="openItemEditor('${it.id}')">${it.name[currentLang]}</div>
+        <div class="item-name" onclick="openItemEditor('${it.id}')">${escapeHtml(nameFor(it))}</div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
       </div>
       <div class="item-days ${statusFor(days)}">${it.fromLabel ? '' : '≈ '}${t.dayLabel(days)}</div>
@@ -2078,6 +2128,20 @@ function escapeAttr(str){
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+// Item names come from the AI (text read off a photo), manual input, the
+// cloud or an imported file — always escape before putting them in HTML.
+function escapeHtml(str){
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Name in the current language, falling back to any language we have.
+function nameFor(it){
+  const n = (it && it.name) || {};
+  return n[currentLang] || n.en || Object.values(n).find(Boolean) || '';
+}
+
 function groupRow(g, t, i){
   if(g.items.length === 1) return itemRow(g.lead, t, i);
 
@@ -2097,7 +2161,7 @@ function groupRow(g, t, i){
       <div class="status-dot ${statusFor(days)}"></div>
       <div class="item-icon${photoItem && safeThumb(photoItem.thumbnail) ? ' has-photo' : ''}">${itemIconHtml(photoItem || it)}<span class="qty-badge">×${g.items.length}</span></div>
       <div class="item-main" data-key="${escapeAttr(g.key)}" onclick="toggleGroup(this.dataset.key)" role="button" aria-expanded="${open}">
-        <div class="item-name">${it.name[currentLang]}
+        <div class="item-name">${escapeHtml(nameFor(it))}
           <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
@@ -2109,11 +2173,13 @@ function groupRow(g, t, i){
   `;
 }
 
+let toastTimer = null;
 function showToast(msg, duration = 2400){
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(()=> el.classList.remove('show'), duration);
+  clearTimeout(toastTimer); // the previous toast's timer would hide this one early
+  toastTimer = setTimeout(()=> el.classList.remove('show'), duration);
 }
 
 let lastRawText = '';
@@ -2226,6 +2292,12 @@ async function fetchWithTimeout(url, options, timeoutMs){
   }
 }
 
+// Platform error pages (413 too large, 504 timeout) are HTML, not JSON.
+async function readJson(response){
+  try { return await response.json(); }
+  catch(e) { return { error: `Request failed (${response.status})` }; }
+}
+
 // Several angles of one product go up together in one request (counted as
 // one scan). Each is downscaled so the whole request stays well under the
 // 4.5MB Vercel / 4MB Groq limits; a single photo keeps full 2048px detail.
@@ -2258,7 +2330,7 @@ async function runAIAnalysis(files){
       body: JSON.stringify(images.length > 1 ? { images } : { image: images[0] })
     }, ANALYZE_TIMEOUT_MS);
 
-    const data = await response.json();
+    const data = await readJson(response);
 
     if(!response.ok){
       if(data.code === 'busy'){
@@ -2446,7 +2518,9 @@ function demoReceiptImage(){
 let demoRunning = false;
 
 function runDemoScan(){
-  if(demoRunning) return;
+  // Not while a real photo is being analyzed: the demo would clear its
+  // preview and re-enable the scan buttons mid-analysis.
+  if(demoRunning || document.getElementById('scanBtn').disabled) return;
   demoRunning = true;
   dismissSecondPhotoHint();
   const t = translations[currentLang];
@@ -2496,7 +2570,10 @@ function runDemoScan(){
 // estimate, like an unreadable date.
 function plausibleExpiry(dateStr){
   if(!dateStr) return null;
-  const d = new Date(dateStr);
+  // new Date('2026-10-17') is UTC midnight — shown as Oct 16 west of UTC.
+  // A printed date is a local calendar day, so build it in local time.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr).trim());
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(dateStr);
   if(isNaN(d.getTime())) return null;
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
@@ -2519,12 +2596,10 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
       showToast(friendlyMessage, 5000);
       return;
     }
-    // TEMPORARY: append the real error so it's diagnosable on iOS, where
-    // there's no browser console. Once the root cause behind "Something
-    // went wrong analyzing the photo" is confirmed, replace this with a
-    // friendly, error-specific message (translated) and keep the raw
-    // detail server-side (Vercel logs) only.
-    showToast(errorDetail ? `${t.aiError} (${errorDetail})` : t.aiError, 5000);
+    // Friendly message only; the technical detail is kept for
+    // My Profile → Diagnostics (lastRawText) and in the server logs.
+    if(errorDetail) lastRawText = String(errorDetail);
+    showToast(t.aiError, 5000);
     return;
   }
 
@@ -2551,8 +2626,8 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
     }
     const category = categoryMeta[it.category] ? it.category : 'pantry';
     return {
-      id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
-      name: it.name,
+      id: newItemId(),
+      name: it.name && typeof it.name === 'object' ? it.name : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') },
       category,
       expiryDate,
       fromLabel,
@@ -2629,7 +2704,7 @@ async function handleSecondPhoto(event){
       body: JSON.stringify({ images: [firstImage, secondImage] })
     }, ANALYZE_TIMEOUT_MS);
 
-    const data = await response.json();
+    const data = await readJson(response);
     if(!response.ok){
       if(data.code === 'busy'){
         showToast(t.aiBusy, 5000);
@@ -2664,7 +2739,8 @@ async function handleSecondPhoto(event){
       showToast(t.aiTimeout, 5000);
       return;
     }
-    showToast(t.aiError + ' (' + err.message + ')', 5000);
+    lastRawText = String(err && err.message || err);
+    showToast(t.aiError, 5000);
   }
 }
 
@@ -2795,14 +2871,14 @@ function openItemEditor(id){
   if(id){
     const it = currentItems.find(x => x.id === id);
     if(!it) return;
-    document.getElementById('editName').value = it.name[currentLang] || it.name.en || '';
+    document.getElementById('editName').value = nameFor(it);
     document.getElementById('editCategory').value = it.category;
-    document.getElementById('editDate').value = it.expiryDate.slice(0,10);
+    document.getElementById('editDate').value = toLocalDateInput(new Date(it.expiryDate));
   } else {
     document.getElementById('editName').value = '';
     document.getElementById('editCategory').value = 'pantry';
     const d = new Date(); d.setDate(d.getDate() + 5);
-    document.getElementById('editDate').value = d.toISOString().slice(0,10);
+    document.getElementById('editDate').value = toLocalDateInput(d);
   }
   document.getElementById('editorOverlay').classList.add('show');
 }
@@ -2835,7 +2911,7 @@ function saveItemEditor(){
     }
   } else {
     savedItem = {
-      id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      id: newItemId(),
       name: { en: name, ar: name, es: name },
       category,
       expiryDate,
@@ -2853,6 +2929,27 @@ function saveItemEditor(){
   maybeNotifyUrgentItems();
 }
 
+// Normalise an item from an untrusted source (backup file, cloud, old local
+// data): must have a name and a valid date; unsafe ids are replaced.
+function sanitizeItem(raw){
+  if(!raw || typeof raw !== 'object') return null;
+  let name = raw.name;
+  if(typeof name === 'string') name = { en: name, ar: name, es: name };
+  if(!name || typeof name !== 'object' || !Object.values(name).some(v => typeof v === 'string' && v.trim())) return null;
+  const expiry = new Date(raw.expiryDate);
+  if(isNaN(expiry.getTime())) return null;
+  const it = {
+    id: SAFE_ID.test(String(raw.id || '')) ? String(raw.id) : newItemId(),
+    name: Object.fromEntries(Object.entries(name).filter(([, v]) => typeof v === 'string').map(([k, v]) => [k, v.slice(0, 120)])),
+    category: categoryMeta[raw.category] ? raw.category : 'pantry',
+    expiryDate: expiry.toISOString(),
+    fromLabel: !!raw.fromLabel,
+  };
+  if(raw.demo) it.demo = true;
+  if(safeThumb(raw.thumbnail)) it.thumbnail = raw.thumbnail;
+  return it;
+}
+
 // --- Backup: export/import a JSON file — a manual, no-account alternative to cloud sync ---
 function exportBackup(){
   const payload = { items: currentItems.filter(it => !it.demo), exportedAt: new Date().toISOString() };
@@ -2862,7 +2959,7 @@ function exportBackup(){
   a.href = url;
   a.download = `freshtrack-backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10000); // revoking at once can cancel the download on iOS
 }
 
 function importBackup(event){
@@ -2873,10 +2970,18 @@ function importBackup(event){
     try{
       const parsed = JSON.parse(reader.result);
       if(!Array.isArray(parsed.items)) throw new Error('bad format');
-      currentItems = [...currentItems, ...parsed.items];
+      // Keep only well-formed items (a malformed one used to break the whole
+      // list), skip ones already present (re-importing duplicated them with
+      // the same id) and sync to the cloud — otherwise a signed-in user's
+      // imported items vanished on the next launch, when the cloud list
+      // replaces the local one.
+      const existing = new Set(currentItems.map(it => it.id));
+      const imported = parsed.items.map(sanitizeItem).filter(it => it && !existing.has(it.id));
+      currentItems = [...currentItems, ...imported];
       saveItems();
+      imported.forEach(syncItemToCloud);
       render(false);
-      showToast(translations[currentLang].importSuccess(parsed.items.length));
+      showToast(translations[currentLang].importSuccess(imported.length));
     } catch(e){
       showToast(translations[currentLang].importError);
     }
@@ -2901,19 +3006,19 @@ async function requestRecipe(){
       method: 'POST',
       headers: apiHeaders(),
       body: JSON.stringify({
-        items: urgent.map(it => it.name.en),
+        items: urgent.map(it => (it.name && it.name.en) || nameFor(it)),
         language: currentLang,
       }),
     });
-    const data = await response.json();
+    const data = await readJson(response);
     if(!response.ok) throw new Error(data.error || 'request failed');
 
     const cleaned = (data.text || '').replace(/```json|```/g, '').trim();
     const recipe = JSON.parse(cleaned);
 
     document.getElementById('recipeContent').innerHTML = `
-      <h4>${recipe.title || ''}</h4>
-      <ul>${(recipe.steps || []).map(s => `<li>${s}</li>`).join('')}</ul>
+      <h4>${escapeHtml(recipe.title || '')}</h4>
+      <ul>${(Array.isArray(recipe.steps) ? recipe.steps : []).map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
     `;
   } catch(err){
     console.error(err);
@@ -2950,7 +3055,7 @@ function loadItems(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return;
     const parsed = JSON.parse(raw);
-    if(Array.isArray(parsed)) currentItems = parsed;
+    if(Array.isArray(parsed)) currentItems = parsed.map(sanitizeItem).filter(Boolean);
   } catch(e){
     console.warn('Could not load saved items:', e);
   }
@@ -3040,7 +3145,7 @@ function maybeNotifyUrgentItems(force){
   try{
     new Notification('FreshTrack', {
       body: t.notifBody(urgentCount),
-      icon: 'icons/icon-192.png',
+      icon: 'icon-192.png',
     });
     localStorage.setItem(NOTIF_LAST_KEY, todayStr);
   } catch(e){
@@ -3091,7 +3196,7 @@ function onboardNext(){
 }
 
 loadItems();
-applyLang('en');
+applyLang(initialLang());
 initSupabase();
 drawNavShape();
 setupSummaryCarousel();
@@ -3148,8 +3253,12 @@ function showUpdateBanner(registration){
 
 if('serviceWorker' in navigator){
   let refreshing = false;
+  // On a first visit there is no controller yet; the new worker's
+  // clients.claim() then fires controllerchange and used to reload the page
+  // a moment after it opened. Only reload when replacing an existing worker.
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-    if(refreshing) return;
+    if(refreshing || !hadController) return;
     refreshing = true;
     location.reload();
   });

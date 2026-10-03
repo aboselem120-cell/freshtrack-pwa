@@ -77,8 +77,11 @@ export default async function handler(req, res) {
     if (!subs || subs.length === 0) continue;
 
     const count = byUser[userId].length;
+    // `count` lets the service worker word the notification in the app's
+    // language; `body` stays as the English fallback for older workers.
     const payload = JSON.stringify({
       title: 'FreshTrack',
+      count,
       body: `${count} item${count > 1 ? 's' : ''} expiring soon — check FreshTrack`,
     });
 
