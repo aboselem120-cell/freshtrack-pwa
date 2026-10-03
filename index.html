@@ -1109,7 +1109,8 @@ const translations = {
     secondPhotoSuccessToast:'لقينا تاريخ الانتهاء — نعرض الآن التاريخ الحقيقي!',
     secondPhotoStillNotFoundToast:'ما زلنا ما لقينا تاريخًا مطبوعًا. أبقينا التقدير.',
     updateAvailable:'🔄 يتوفر تحديث — اضغط هنا',
-    today:(d)=>d.toLocaleDateString('ar-SA',{day:'numeric',month:'short'}),
+    // calendar:'gregory' — iOS otherwise formats ar-SA dates in the Hijri calendar
+    today:(d)=>d.toLocaleDateString('ar-SA',{day:'numeric',month:'short',calendar:'gregory'}),
     dayLabel:(days)=>{
       if(days<0) return `منتهي من ${Math.abs(days)} يوم`;
       if(days===0) return 'ينتهي اليوم';
@@ -1675,6 +1676,7 @@ function applyLang(lang){
   if(document.getElementById('onboardOverlay').classList.contains('show')) renderOnboardStep();
   renderAccountBox();
   render();
+  resetSummaryCarousel();
 }
 
 function buildLangList(){
@@ -1788,18 +1790,29 @@ function setupSummaryCarousel(){
   const cards = track.children.length;
   dots.innerHTML = Array.from({ length: cards }, (_, i) =>
     `<button class="summary-dot${i === 0 ? ' active' : ''}" aria-label="${i + 1}" onclick="scrollSummaryTo(${i})"></button>`).join('');
-  track.addEventListener('scroll', () => {
-    // Active card = the one whose centre is closest to the track's centre.
-    // Works the same in LTR and RTL (scrollLeft semantics differ there).
-    const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
-    let i = 0, best = Infinity;
-    [...track.children].forEach((card, k) => {
-      const r = card.getBoundingClientRect();
-      const dist = Math.abs(r.left + r.width / 2 - mid);
-      if(dist < best){ best = dist; i = k; }
-    });
+  // The active dot follows whichever card is mostly visible in the track.
+  // IntersectionObserver is independent of LTR/RTL scroll coordinates,
+  // which differ between browsers (iOS Safari got the index wrong in RTL).
+  // Track every card's latest visible ratio and mark the most visible one, so
+  // a card scrolling out of view (ratio dropping) also updates the dot.
+  const cardsList = [...track.children];
+  const ratios = cardsList.map(() => 0);
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => { ratios[cardsList.indexOf(entry.target)] = entry.intersectionRatio; });
+    const i = ratios.indexOf(Math.max(...ratios));
     dots.querySelectorAll('.summary-dot').forEach((d, k) => d.classList.toggle('active', k === i));
-  }, { passive:true });
+  }, { root: track, threshold: [0, 0.25, 0.5, 0.75, 1] });
+  cardsList.forEach(card => observer.observe(card));
+}
+
+// Switching language flips the carousel's direction; start again from the
+// first card so the position and the active dot can't disagree.
+function resetSummaryCarousel(){
+  const track = document.getElementById('summaryCarousel');
+  const dots = document.getElementById('summaryDots');
+  if(!track || !dots) return;
+  track.scrollLeft = 0;
+  dots.querySelectorAll('.summary-dot').forEach((d, k) => d.classList.toggle('active', k === 0));
 }
 
 function scrollSummaryTo(i){
