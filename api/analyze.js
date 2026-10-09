@@ -19,7 +19,7 @@ Identify every distinct food/grocery item clearly visible or listed. Ignore non-
   language — never the receipt's abbreviations or store-brand codes (e.g.
   receipt line "ZUZU PR IAURT 2%150G" → "Yogurt" / "زبادي" / "Yogur";
   "PROXI TON M ULEI160G" → "Canned Tuna in Oil").
-- icon: the picture that best shows this product, exactly one of: icecream, milk, egg, yogurt, cheese, butter, honey, jam, sausage, chicken, meat, canned, fish, sauce, oil, olives, cake, cookies, croissant, bread, rice, pasta, cereal, flour, sugar, chips, nuts, dates, water, juice, coffee, tea, soda, tomato, potato, greens, cucumber, carrot, onion, broccoli, eggplant, pineapple, apple, banana, orange, lemon, strawberry, grapes, avocado, pepper-red, pepper, bar.
+- icon: the picture that best shows this product, exactly one of: pizza, sandwich, noodles, popcorn, fries, chips, icecream, cereal, spread, pickles, ketchup, vinegar, spices, milk, egg, yogurt, cheese, butter, tofu, honey, jam, candy, cake, cookies, bar, chocolate, sausage, chicken, meat, canned, shrimp, fish, greenbeans, legumes, sauce, oil, olives, croissant, tortilla, bread, rice, pasta, flour, sugar, salt, nuts, dates, water, juice, coffee, tea, soda, potato, tomato, greens, cucumber, zucchini, carrot, garlic, onion, broccoli, cabbage, mushroom, corn, pumpkin, ginger, radish, beet, celery, eggplant, pineapple, watermelon, melon, apple, banana, orange, lemon, strawberry, cherries, grapes, avocado, peach, pear, mango, kiwi, pomegranate, plum, fig, coconut, pepper-red, pepper, frozen.
   Pick the closest kind of food (e.g. labneh → yogurt, hummus → sauce, salami → sausage,
   biscuits → cookies, olive oil → oil). null if none of them fits.
 - receipt_name: on a receipt only, the item's line text exactly as printed
