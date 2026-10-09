@@ -2121,22 +2121,37 @@ function daysUntil(expiryDate){
 // water). First match wins, so specific names come before the generic ones
 // they contain, and drinks before the fruits they may be flavoured with.
 const PRODUCT_TYPES = [
+  [/ice ?cream|gelato/, 'icecream', {en:'Ice cream', ar:'آيس كريم', es:'Helado'}],
   [/milk|laban|ayran/, 'milk', {en:'Milk', ar:'حليب', es:'Leche'}],
   [/\beggs?\b/, 'egg', {en:'Eggs', ar:'بيض', es:'Huevos'}],
   [/yog(h)?urt|labneh|labne/, 'yogurt', {en:'Yogurt', ar:'زبادي', es:'Yogur'}],
   [/cheese|cascaval|feta|halloumi/, 'cheese', {en:'Cheese', ar:'جبن', es:'Queso'}],
   [/butter/, 'butter', {en:'Butter', ar:'زبدة', es:'Mantequilla'}],
   [/cream/, 'yogurt', {en:'Cream', ar:'قشطة', es:'Nata'}],
+  [/honey/, 'honey', {en:'Honey', ar:'عسل', es:'Miel'}],
+  [/\bjam\b|jelly|marmalade|preserve/, 'jam', {en:'Jam', ar:'مربى', es:'Mermelada'}],
+  [/sausage|hot ?dog|salami|pepperoni|\bham\b|mortadella|deli/, 'sausage', {en:'Sausages', ar:'نقانق', es:'Embutidos'}],
   [/chicken|poultry|turkey/, 'chicken', {en:'Chicken', ar:'دجاج', es:'Pollo'}],
   [/beef|steak|lamb|mince|meat/, 'meat', {en:'Meat', ar:'لحم', es:'Carne'}],
   [/tuna/, 'canned', {en:'Tuna', ar:'تونة', es:'Atún'}],
   [/fish|salmon|shrimp/, 'fish', {en:'Fish', ar:'سمك', es:'Pescado'}],
   [/beans/, 'canned', {en:'Beans', ar:'فاصوليا', es:'Frijoles'}],
+  [/sauce|ketchup|mayo|mustard|paste|hummus|dressing|salsa/, 'sauce', {en:'Sauces', ar:'صلصات', es:'Salsas'}],
+  [/\boil\b/, 'oil', {en:'Oil', ar:'زيت', es:'Aceite'}],
+  [/olive/, 'olives', {en:'Olives', ar:'زيتون', es:'Aceitunas'}],
   [/can(ned)?\b/, 'canned', {en:'Canned food', ar:'معلبات', es:'Conservas'}],
+  [/cake|muffin|brownie|donut|doughnut|cupcake/, 'cake', {en:'Cakes', ar:'كيك', es:'Pasteles'}],
+  [/cookie|biscuit|cracker|wafer/, 'cookies', {en:'Cookies', ar:'بسكويت', es:'Galletas'}],
   [/croissant|pastr/, 'croissant', {en:'Pastries', ar:'معجنات', es:'Bollería'}],
   [/bread|toast|pita|\bbuns?\b|baguette/, 'bread', {en:'Bread', ar:'خبز', es:'Pan'}],
   [/\brice\b/, 'rice', {en:'Rice', ar:'رز', es:'Arroz'}],
   [/pasta|spaghetti|noodle|macaroni/, 'pasta', {en:'Pasta', ar:'معكرونة', es:'Pasta'}],
+  [/cereal|cornflakes|corn flakes|granola|muesli|oats|oatmeal/, 'cereal', {en:'Cereal', ar:'حبوب الإفطار', es:'Cereales'}],
+  [/flour/, 'flour', {en:'Flour', ar:'طحين', es:'Harina'}],
+  [/sugar/, 'sugar', {en:'Sugar', ar:'سكر', es:'Azúcar'}],
+  [/chips|crisps/, 'chips', {en:'Chips', ar:'شيبس', es:'Patatas fritas'}],
+  [/\bnuts?\b|almond|cashew|peanut|walnut|pistachio|hazelnut/, 'nuts', {en:'Nuts', ar:'مكسرات', es:'Frutos secos'}],
+  [/\bdates?\b/, 'dates', {en:'Dates', ar:'تمر', es:'Dátiles'}],
   [/water/, 'water', {en:'Water', ar:'ماء', es:'Agua'}],
   [/juice/, 'juice', {en:'Juice', ar:'عصير', es:'Zumo'}],
   [/coffee/, 'coffee', {en:'Coffee', ar:'قهوة', es:'Café'}],
@@ -2162,11 +2177,26 @@ const PRODUCT_TYPES = [
   [/pepper/, 'pepper', {en:'Peppers', ar:'فلفل', es:'Pimientos'}],
   [/\bbar\b|chocolate/, 'bar', {en:'Bars', ar:'ألواح', es:'Barritas'}],
 ];
-const CATEGORY_ICONS = { dairy:'milk', meat:'chicken', produce:'broccoli', bakery:'bread', pantry:'canned' };
+// Neutral icons for products no type matches, so an unknown pantry item
+// doesn't show up as a tuna can.
+const CATEGORY_ICONS = { dairy:'dairy', meat:'meat-tray', produce:'produce', bakery:'bread', pantry:'grocery' };
+const ICON_SLUGS = new Set(PRODUCT_TYPES.map(type => type[1]));
 
 // name.generic: the plain English name kept when the item is shown under its
 // receipt text (e.g. "ZUZU PR IAURT 2%150G"), so type matching still works.
+// name.icon: the icon the scan's AI picked from ICON_SLUGS (it knows that
+// "labneh" is a yogurt even when no keyword matches); else match the name.
 function productType(it){
+  const picked = it.name && it.name.icon;
+  if(picked && ICON_SLUGS.has(picked)){
+    const byName = matchTypeByName(it);
+    if(byName && byName[1] === picked) return byName; // keeps "Tuna" vs "Beans" apart
+    return PRODUCT_TYPES.find(type => type[1] === picked);
+  }
+  return matchTypeByName(it);
+}
+
+function matchTypeByName(it){
   const name = String((it.name && (it.name.generic || it.name.en)) || '').toLowerCase();
   return PRODUCT_TYPES.find(([re]) => re.test(name)) || null;
 }
@@ -2805,10 +2835,12 @@ function addScannedItems(items, useReceiptNames){
     }
     const category = categoryMeta[it.category] ? it.category : 'pantry';
     const printed = useReceiptNames && typeof it.receipt_name === 'string' && it.receipt_name.trim();
+    const name = printed ? { en: printed, ar: printed, es: printed, generic: String((it.name && it.name.en) || '') }
+      : it.name && typeof it.name === 'object' ? { ...it.name } : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') };
+    if(typeof it.icon === 'string' && ICON_SLUGS.has(it.icon)) name.icon = it.icon;
     return {
       id: newItemId(),
-      name: printed ? { en: printed, ar: printed, es: printed, generic: String((it.name && it.name.en) || '') }
-        : it.name && typeof it.name === 'object' ? it.name : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') },
+      name,
       category,
       expiryDate,
       fromLabel,

@@ -19,6 +19,9 @@ Identify every distinct food/grocery item clearly visible or listed. Ignore non-
   language — never the receipt's abbreviations or store-brand codes (e.g.
   receipt line "ZUZU PR IAURT 2%150G" → "Yogurt" / "زبادي" / "Yogur";
   "PROXI TON M ULEI160G" → "Canned Tuna in Oil").
+- icon: the picture that best shows this product, exactly one of: icecream, milk, egg, yogurt, cheese, butter, honey, jam, sausage, chicken, meat, canned, fish, sauce, oil, olives, cake, cookies, croissant, bread, rice, pasta, cereal, flour, sugar, chips, nuts, dates, water, juice, coffee, tea, soda, tomato, potato, greens, cucumber, carrot, onion, broccoli, eggplant, pineapple, apple, banana, orange, lemon, strawberry, grapes, avocado, pepper-red, pepper, bar.
+  Pick the closest kind of food (e.g. labneh → yogurt, hummus → sauce, salami → sausage,
+  biscuits → cookies, olive oil → oil). null if none of them fits.
 - receipt_name: on a receipt only, the item's line text exactly as printed
   (e.g. "ZUZU PR IAURT 2%150G"). null for photos of products.
 - category: exactly one of "dairy", "meat", "produce", "bakery", "pantry" (pick the closest fit)
@@ -108,7 +111,7 @@ CRITICAL — receipts do not print per-item expiry dates:
 A store receipt's printed date (near the top or bottom, often next to a time, terminal number, or "thank you" line) is the TRANSACTION/PURCHASE date, not an expiry date for any item. NEVER copy a receipt's transaction date into any item's expiry_date field. When scanning a receipt (a list of item names with prices, no individual packaging visible), expiry_date must be null for every item — always use estimated_days instead. Only set expiry_date when you can see an individual product's actual packaging with a date printed on it (a single jar/carton/package photo, not a printed receipt).
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:
-{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","quantity":N,"receipt_name":"..."|null,"expiry_raw":"..."|null,"expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
+{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","quantity":N,"icon":"..."|null,"receipt_name":"..."|null,"expiry_raw":"..."|null,"expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
 
 If you cannot confidently identify any grocery item in the photo, respond with {"items":[]}.`;
 
