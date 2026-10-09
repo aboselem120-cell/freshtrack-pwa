@@ -438,6 +438,8 @@
   .lang-option.active .check{ border-color:var(--green); background:var(--green); }
   .lang-option.active .check::after{ content:'✓'; color:#fff; font-size:11px; font-weight:700; }
 
+  .receipt-name-example{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; direction:ltr; unicode-bidi:plaintext; }
+
   .close-sheet{
     width:100%; margin-top:16px; padding:12px; background:none;
     border:1px solid var(--line); border-radius:2px; font-family:inherit;
@@ -1002,6 +1004,19 @@
   </div>
 </div>
 
+<!-- No backdrop-tap dismiss: the scanned items are only added once a name style is chosen. -->
+<div class="overlay" id="receiptNameOverlay">
+  <div class="sheet">
+    <div class="sheet-title" data-t="receiptNameTitle">How should items be named?</div>
+    <div class="lang-option" onclick="chooseReceiptNames(false)">
+      <div><div data-t="receiptNameTranslated">In the app's language</div><div class="receipt-name-example" id="receiptNameExTranslated"></div></div>
+    </div>
+    <div class="lang-option" onclick="chooseReceiptNames(true)">
+      <div><div data-t="receiptNamePrinted">As printed on the receipt</div><div class="receipt-name-example" id="receiptNameExPrinted"></div></div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="recipeOverlay" onclick="if(event.target===this) closeRecipeModal()">
   <div class="sheet">
     <div class="sheet-title" data-t="recipeTitle">Recipe Idea</div>
@@ -1064,6 +1079,9 @@ const translations = {
     cancelBtn:'Cancel',
     saveBtn:'Save',
     recipeTitle:'Recipe Idea',
+    receiptNameTitle:'How should items be named?',
+    receiptNameTranslated:"In the app's language",
+    receiptNamePrinted:'As printed on the receipt',
     itemUsed:'Nice — marked as used',
     itemWasted:'Marked as wasted',
     importSuccess:(n)=>`Imported ${n} items`,
@@ -1167,6 +1185,9 @@ const translations = {
     cancelBtn:'إلغاء',
     saveBtn:'حفظ',
     recipeTitle:'فكرة وصفة',
+    receiptNameTitle:'كيف تبغى أسماء المنتجات؟',
+    receiptNameTranslated:'بلغة التطبيق',
+    receiptNamePrinted:'كما هي مكتوبة في الإيصال',
     itemUsed:'تمام — تم تعليمه كمُستخدم',
     itemWasted:'تم تعليمه كتالف',
     importSuccess:(n)=>`تم استيراد ${n} أغراض`,
@@ -1269,6 +1290,9 @@ const translations = {
     cancelBtn:'Cancelar',
     saveBtn:'Guardar',
     recipeTitle:'Idea de receta',
+    receiptNameTitle:'¿Cómo quieres nombrar los productos?',
+    receiptNameTranslated:'En el idioma de la app',
+    receiptNamePrinted:'Tal como aparecen en el ticket',
     itemUsed:'Genial — marcado como usado',
     itemWasted:'Marcado como desechado',
     importSuccess:(n)=>`${n} artículos importados`,
@@ -2612,6 +2636,32 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
     return;
   }
 
+  // Receipt (several items with printed names): let the user pick between
+  // the app-language names and the names exactly as the receipt prints them.
+  const receiptNames = items.filter(it => typeof it.receipt_name === 'string' && it.receipt_name.trim());
+  if(items.length > 1 && receiptNames.length > 0){
+    pendingReceiptItems = items;
+    document.getElementById('receiptNameExTranslated').textContent =
+      items.slice(0, 2).map(it => nameFor({ name: it.name })).join(', ') + '…';
+    document.getElementById('receiptNameExPrinted').textContent =
+      receiptNames.slice(0, 2).map(it => it.receipt_name.trim()).join(', ') + '…';
+    document.getElementById('receiptNameOverlay').classList.add('show');
+    return;
+  }
+  addScannedItems(items, false);
+}
+
+let pendingReceiptItems = null;
+
+function chooseReceiptNames(useReceiptNames){
+  document.getElementById('receiptNameOverlay').classList.remove('show');
+  const items = pendingReceiptItems;
+  pendingReceiptItems = null;
+  if(items) addScannedItems(items, useReceiptNames);
+}
+
+function addScannedItems(items, useReceiptNames){
+  const t = translations[currentLang];
   const today = new Date(); today.setHours(0,0,0,0);
   // A receipt line like "7 x yogurt" becomes 7 items, which the list groups
   // as one row with a ×7 badge. Capped so a misread count can't flood it.
@@ -2633,9 +2683,11 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
       fromLabel = false;
     }
     const category = categoryMeta[it.category] ? it.category : 'pantry';
+    const printed = useReceiptNames && typeof it.receipt_name === 'string' && it.receipt_name.trim();
     return {
       id: newItemId(),
-      name: it.name && typeof it.name === 'object' ? it.name : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') },
+      name: printed ? { en: printed, ar: printed, es: printed }
+        : it.name && typeof it.name === 'object' ? it.name : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') },
       category,
       expiryDate,
       fromLabel,
