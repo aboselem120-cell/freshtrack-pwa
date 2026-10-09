@@ -689,6 +689,20 @@
   .group-expand .sub-item:last-child{ border-bottom:none; }
   .group-expand .sub-item .item-name{ font-size:14px; font-weight:600; }
 
+  /* ===== 3D product icons + status bar ===== */
+  .item{ position:relative; }
+  .item-icon{ width:40px; height:40px; background:none; border-radius:0; }
+  .item-3d{ width:100%; height:100%; object-fit:contain; display:block; }
+  /* The status dot became a bar along the card's leading edge. */
+  .item .status-dot{
+    position:absolute; inset-inline-start:0; top:10px; bottom:10px;
+    width:4px; height:auto; margin:0; border-radius:0 4px 4px 0; box-shadow:none; animation:none;
+  }
+  [dir="rtl"] .item .status-dot{ border-radius:4px 0 0 4px; }
+  .item .status-dot.fresh{ background:#395B48; }
+  .item .status-dot.soon{ background:#F0A23B; }
+  .item .status-dot.urgent{ background:#E5533D; }
+
   /* ===== Product photos + multi-angle sheet ===== */
   .item-icon.has-photo{ border-radius:50%; background:none; }
   .item-photo{ width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
@@ -2049,25 +2063,30 @@ function daysUntil(expiryDate){
 
 // Small product icon for the list: matched from the English name, falling
 // back to the category icon. Stand-in until real item photos are added.
+// 3D food icons (Microsoft Fluent Emoji, MIT) in icons/food/. First match
+// wins, so specific names come before the generic ones they contain.
 const PRODUCT_ICONS = [
-  [/milk|laban|ayran/, '🥛'], [/egg/, '🥚'], [/yog(h)?urt|labneh|labne/, '🥣'],
-  [/cheese|cascaval|feta|halloumi/, '🧀'], [/butter/, '🧈'], [/cream/, '🍶'],
-  [/chicken|poultry|turkey/, '🍗'], [/beef|steak|lamb|mince|meat/, '🥩'], [/fish|salmon|shrimp/, '🐟'],
-  [/tuna|can(ned)?\b|beans/, '🥫'], [/bread|toast|pita|bun|baguette/, '🍞'], [/croissant|pastr/, '🥐'],
-  [/rice/, '🍚'], [/pasta|spaghetti|noodle|macaroni/, '🍝'], [/tomato/, '🍅'], [/potato/, '🥔'],
-  [/spinach|lettuce|salad|greens|kale/, '🥬'], [/cucumber/, '🥒'], [/carrot/, '🥕'], [/onion/, '🧅'],
-  [/apple/, '🍎'], [/banana/, '🍌'], [/orange|citrus/, '🍊'], [/lemon|lime/, '🍋'], [/strawberr|berr/, '🍓'],
-  [/grape/, '🍇'], [/avocado/, '🥑'], [/water/, '💧'], [/juice/, '🧃'], [/coffee/, '☕'],
-  [/pepper/, '🫑'], [/\btea\b/, '🍵'], [/cola|soda|soft drink/, '🥤'], [/\bbar\b|chocolate/, '🍫'],
+  [/milk|laban|ayran/, 'milk'], [/egg/, 'egg'], [/yog(h)?urt|labneh|labne/, 'yogurt'],
+  [/cheese|cascaval|feta|halloumi/, 'cheese'], [/butter/, 'butter'], [/cream/, 'cream'],
+  [/chicken|poultry|turkey/, 'chicken'], [/beef|steak|lamb|mince|meat/, 'meat'], [/fish|salmon|shrimp/, 'fish'],
+  [/tuna|can(ned)?\b|beans/, 'canned'], [/bread|toast|pita|bun|baguette/, 'bread'], [/croissant|pastr/, 'croissant'],
+  [/rice/, 'rice'], [/pasta|spaghetti|noodle|macaroni/, 'pasta'], [/tomato/, 'tomato'], [/potato/, 'potato'],
+  [/spinach|lettuce|salad|greens|kale/, 'greens'], [/cucumber/, 'cucumber'], [/carrot/, 'carrot'], [/onion/, 'onion'],
+  [/broccoli/, 'broccoli'], [/apple/, 'apple'], [/banana/, 'banana'], [/orange|citrus|tangerine|mandarin/, 'orange'],
+  [/lemon|lime/, 'lemon'], [/strawberr|berr/, 'strawberry'], [/grape/, 'grapes'], [/avocado/, 'avocado'],
+  [/water/, 'water'], [/juice/, 'juice'], [/coffee/, 'coffee'],
+  [/red (bell )?pepper/, 'pepper-red'], [/pepper/, 'pepper'], [/\btea\b/, 'tea'], [/cola|soda|soft drink/, 'soda'],
+  [/\bbar\b|chocolate/, 'bar'],
 ];
+const CATEGORY_ICONS = { dairy:'milk', meat:'chicken', produce:'broccoli', bakery:'bread', pantry:'canned' };
 
 function productIcon(it){
   // name.generic: the plain English name kept when the item is shown under
   // its receipt text (e.g. "ZUZU PR IAURT 2%150G"), so the icon still matches.
   const name = String((it.name && (it.name.generic || it.name.en)) || '').toLowerCase();
   const hit = PRODUCT_ICONS.find(([re]) => re.test(name));
-  if(hit) return hit[1];
-  return (categoryMeta[it.category] || categoryMeta.pantry).icon;
+  const slug = hit ? hit[1] : (CATEGORY_ICONS[it.category] || 'canned');
+  return `<img class="item-3d" src="icons/food/${slug}.png" alt="" loading="lazy">`;
 }
 
 // Explicit, always-visible distinction — not just a hover tooltip — between a
