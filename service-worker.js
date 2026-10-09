@@ -103,6 +103,11 @@ const PUSH_TEXT = {
   ar: (n) => `${n} غرض قريب من الانتهاء — افتح FreshTrack`,
   es: (n) => `${n} artículo${n > 1 ? 's' : ''} por caducar — revisa FreshTrack`,
 };
+const PUSH_TEST_TEXT = {
+  en: 'Test notification — reminders will arrive like this.',
+  ar: 'إشعار تجريبي — التذكيرات بتوصلك بهذا الشكل.',
+  es: 'Notificación de prueba — los recordatorios llegarán así.',
+};
 
 // The app saves its current language here (see rememberLangForPush in index.html).
 async function appLanguage() {
@@ -126,7 +131,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil((async () => {
     // Newer payloads carry just the count; word it in the app's language.
     let body = data.body;
-    if (typeof data.count === 'number') body = PUSH_TEXT[await appLanguage()](data.count);
+    if (data.test) body = PUSH_TEST_TEXT[await appLanguage()];
+    else if (typeof data.count === 'number') body = PUSH_TEXT[await appLanguage()](data.count);
     await self.registration.showNotification(data.title || 'FreshTrack', {
       body,
       icon: './icon-192.png',

@@ -977,8 +977,9 @@
 
     <div class="sheet-title" data-t="notifTitle" style="margin-top:22px;">Notifications</div>
     <div id="notifStatus" style="font-size:13px; color:var(--ink-soft); margin-bottom:6px;"></div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px; opacity:0.8;" data-t="notifCaveat">Checked when you open the app — not a background push while it's fully closed.</div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:10px; opacity:0.8;" data-t="notifCaveat">A reminder arrives once a day around noon, even with the app closed (needs sign-in).</div>
     <button class="scan-btn secondary" id="notifBtn" onclick="handleNotifToggle()" style="margin-top:0;"></button>
+    <button class="scan-btn secondary" id="testPushBtn" onclick="sendTestPush()" style="margin-top:8px; display:none;" data-t="testPushBtn">Send test notification</button>
 
     <div class="sheet-title" data-t="backupTitle" style="margin-top:22px;">Backup</div>
     <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;" data-t="backupNote">Export your items to a file, or import one on another device — no account needed.</div>
@@ -1073,7 +1074,10 @@ const translations = {
     notifOn:'On — you\'ll get a reminder when items are expiring soon',
     notifDenied:'Notifications blocked — enable them in your browser/phone settings',
     notifUnsupported:'Notifications aren\'t supported on this browser',
-    notifCaveat:'Checked when you open the app — not a background push while it\'s fully closed.',
+    notifCaveat:'A reminder arrives once a day around noon, even with the app closed (needs sign-in).',
+    testPushBtn:'Send test notification',
+    testPushSent:'Test sent — it should appear in a few seconds',
+    testPushFailed:'Test failed — details in Diagnostics',
     notifBody:(n)=>`${n} item${n>1?'s':''} expiring soon — check FreshTrack`,
     itemRemoved:'Item removed',
     clearAll:'Clear all',
@@ -1179,7 +1183,10 @@ const translations = {
     notifOn:'مفعّلة — بترسل لك تذكير لما تقترب أغراضك من الانتهاء',
     notifDenied:'التنبيهات محظورة — فعّلها من إعدادات المتصفح/الجوال',
     notifUnsupported:'التنبيهات مو مدعومة بهذا المتصفح',
-    notifCaveat:'يتفحّص لما تفتح التطبيق — مو تنبيه خلفية حقيقي والتطبيق مقفول تمامًا.',
+    notifCaveat:'يوصلك تذكير مرة في اليوم وقت الظهر، حتى والتطبيق مقفول (يحتاج تسجيل دخول).',
+    testPushBtn:'أرسل إشعار تجريبي',
+    testPushSent:'انرسل الإشعار — بيوصلك خلال ثواني',
+    testPushFailed:'فشل الإرسال — التفاصيل في Diagnostics',
     notifBody:(n)=>`${n} غرض قريب من الانتهاء — افتح FreshTrack`,
     itemRemoved:'تم حذف الغرض',
     clearAll:'حذف الكل',
@@ -1284,7 +1291,10 @@ const translations = {
     notifOn:'Activadas — recibirás un aviso cuando algo esté por caducar',
     notifDenied:'Notificaciones bloqueadas — actívalas en la configuración de tu navegador/teléfono',
     notifUnsupported:'Este navegador no admite notificaciones',
-    notifCaveat:'Se revisa cuando abres la app — no es una notificación en segundo plano si está completamente cerrada.',
+    notifCaveat:'Llega un recordatorio al día hacia el mediodía, incluso con la app cerrada (requiere iniciar sesión).',
+    testPushBtn:'Enviar notificación de prueba',
+    testPushSent:'Prueba enviada — debería aparecer en unos segundos',
+    testPushFailed:'La prueba falló — detalles en Diagnostics',
     notifBody:(n)=>`${n} artículo${n>1?'s':''} por caducar — revisa FreshTrack`,
     itemRemoved:'Artículo eliminado',
     clearAll:'Eliminar todo',
@@ -1404,6 +1414,7 @@ function initSupabase(){
     markOwnerDevice(currentUser);
     renderAccountBox();
     if(currentUser) loadItemsFromCloud();
+    if(currentUser && notifEnabled()) subscribeToPush(true);
   });
 }
 
@@ -1527,6 +1538,7 @@ function trackDailyOpen(){
 }
 
 function renderAccountBox(){
+  updateNotifUI(); // the test-push button depends on being signed in
   const box = document.getElementById('accountBox');
   if(!box) return;
   const t = translations[currentLang];
@@ -1686,7 +1698,9 @@ function urlBase64ToUint8Array(base64String){
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-async function subscribeToPush(){
+// Runs when notifications are switched on and on every launch while they are
+// on (silent), so the stored subscription follows the one iOS currently uses.
+async function subscribeToPush(silent){
   if(!currentUser || !cloudConfigured()) return; // push storage needs the cloud account
   if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
@@ -1706,10 +1720,47 @@ async function subscribeToPush(){
       subscription: sub.toJSON(),
     }, { onConflict: 'user_id,endpoint' });
     if(error) throw error;
+    pushApi('claim', sub.endpoint).catch(() => {});
+    return sub;
   }catch(err){
     console.error('[subscribeToPush] failed', err);
     lastRawText = 'Push subscription failed: ' + (err && err.message);
-    showToast(translations[currentLang].cloudSaveFailed, 4000);
+    if(!silent) showToast(translations[currentLang].cloudSaveFailed, 4000);
+  }
+}
+
+async function pushApi(action, endpoint){
+  const { data } = await sb.auth.getSession();
+  const token = data.session && data.session.access_token;
+  if(!token) throw new Error('Not signed in');
+  const res = await fetch('/api/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ action, endpoint }),
+  });
+  const body = await readJson(res);
+  if(!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+  return body;
+}
+
+// My Profile → "Send test notification": a real push through the server, so
+// it shows whether background reminders reach this phone. The per-device
+// answer from the push service goes to Diagnostics.
+async function sendTestPush(){
+  const t = translations[currentLang];
+  const btn = document.getElementById('testPushBtn');
+  if(btn) btn.disabled = true;
+  try{
+    const sub = await subscribeToPush(true);
+    const { results } = await pushApi('test', sub && sub.endpoint);
+    lastRawText = 'Test push: ' + JSON.stringify(results, null, 1);
+    const ok = results.filter(r => r.ok).length;
+    showToast(ok ? t.testPushSent : t.testPushFailed, 5000);
+  }catch(err){
+    lastRawText = 'Test push failed: ' + (err && err.message);
+    showToast(t.testPushFailed, 5000);
+  }finally{
+    if(btn) btn.disabled = false;
   }
 }
 
@@ -3248,7 +3299,9 @@ function updateNotifUI(){
   const t = translations[currentLang];
   const statusEl = document.getElementById('notifStatus');
   const btn = document.getElementById('notifBtn');
+  const testBtn = document.getElementById('testPushBtn');
   if(!statusEl || !btn) return;
+  if(testBtn) testBtn.style.display = 'none';
 
   if(!notifSupported()){
     statusEl.textContent = t.notifUnsupported;
@@ -3263,6 +3316,7 @@ function updateNotifUI(){
   } else if(notifEnabled()){
     statusEl.textContent = t.notifOn;
     btn.textContent = '✓ ' + t.notifEnable;
+    if(testBtn && currentUser) testBtn.style.display = '';
   } else {
     statusEl.textContent = '';
     btn.textContent = t.notifEnable;
@@ -3274,8 +3328,11 @@ function maybeNotifyUrgentItems(force){
   const urgentCount = currentItems.filter(it => !it.demo && daysUntil(it.expiryDate) <= 3).length;
   if(urgentCount === 0) return;
 
+  // Stored as "<day>|<count>": at most once a day, unless more items have
+  // become urgent since (e.g. a receipt scanned after the morning reminder).
   const todayStr = new Date().toDateString();
-  if(!force && localStorage.getItem(NOTIF_LAST_KEY) === todayStr) return;
+  const [lastDay, lastCount] = String(localStorage.getItem(NOTIF_LAST_KEY) || '').split('|');
+  if(!force && lastDay === todayStr && urgentCount <= (parseInt(lastCount, 10) || 0)) return;
 
   const t = translations[currentLang];
   try{
@@ -3283,7 +3340,7 @@ function maybeNotifyUrgentItems(force){
       body: t.notifBody(urgentCount),
       icon: 'icon-192.png',
     });
-    localStorage.setItem(NOTIF_LAST_KEY, todayStr);
+    localStorage.setItem(NOTIF_LAST_KEY, todayStr + '|' + urgentCount);
   } catch(e){
     console.warn('Notification failed:', e);
   }
