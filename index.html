@@ -2064,29 +2064,63 @@ function daysUntil(expiryDate){
 
 // Small product icon for the list: matched from the English name, falling
 // back to the category icon. Stand-in until real item photos are added.
-// Food photos (Wikimedia Commons, see credits.html) in icons/food/. First match
-// wins, so specific names come before the generic ones they contain.
-const PRODUCT_ICONS = [
-  [/milk|laban|ayran/, 'milk'], [/egg/, 'egg'], [/yog(h)?urt|labneh|labne/, 'yogurt'],
-  [/cheese|cascaval|feta|halloumi/, 'cheese'], [/butter/, 'butter'], [/cream/, 'yogurt'],
-  [/chicken|poultry|turkey/, 'chicken'], [/beef|steak|lamb|mince|meat/, 'meat'], [/fish|salmon|shrimp/, 'fish'],
-  [/tuna|can(ned)?\b|beans/, 'canned'], [/bread|toast|pita|bun|baguette/, 'bread'], [/croissant|pastr/, 'croissant'],
-  [/rice/, 'rice'], [/pasta|spaghetti|noodle|macaroni/, 'pasta'], [/tomato/, 'tomato'], [/potato/, 'potato'],
-  [/spinach|lettuce|salad|greens|kale/, 'greens'], [/cucumber/, 'cucumber'], [/carrot/, 'carrot'], [/onion/, 'onion'],
-  [/broccoli/, 'broccoli'], [/apple/, 'apple'], [/banana/, 'banana'], [/orange|citrus|tangerine|mandarin/, 'orange'],
-  [/lemon|lime/, 'lemon'], [/strawberr|berr/, 'strawberry'], [/grape/, 'grapes'], [/avocado/, 'avocado'],
-  [/water/, 'water'], [/juice/, 'juice'], [/coffee/, 'coffee'],
-  [/red (bell )?pepper/, 'pepper-red'], [/pepper/, 'pepper'], [/\btea\b/, 'tea'], [/cola|soda|soft drink/, 'soda'],
-  [/\bbar\b|chocolate/, 'bar'],
+// Product types, matched on the English name: a food photo in icons/food/
+// (Wikimedia Commons, see credits.html) and the label used when one list row
+// groups several products of the same type ("Tuna ×7" for tuna in oil and in
+// water). First match wins, so specific names come before the generic ones
+// they contain, and drinks before the fruits they may be flavoured with.
+const PRODUCT_TYPES = [
+  [/milk|laban|ayran/, 'milk', {en:'Milk', ar:'حليب', es:'Leche'}],
+  [/\beggs?\b/, 'egg', {en:'Eggs', ar:'بيض', es:'Huevos'}],
+  [/yog(h)?urt|labneh|labne/, 'yogurt', {en:'Yogurt', ar:'زبادي', es:'Yogur'}],
+  [/cheese|cascaval|feta|halloumi/, 'cheese', {en:'Cheese', ar:'جبن', es:'Queso'}],
+  [/butter/, 'butter', {en:'Butter', ar:'زبدة', es:'Mantequilla'}],
+  [/cream/, 'yogurt', {en:'Cream', ar:'قشطة', es:'Nata'}],
+  [/chicken|poultry|turkey/, 'chicken', {en:'Chicken', ar:'دجاج', es:'Pollo'}],
+  [/beef|steak|lamb|mince|meat/, 'meat', {en:'Meat', ar:'لحم', es:'Carne'}],
+  [/tuna/, 'canned', {en:'Tuna', ar:'تونة', es:'Atún'}],
+  [/fish|salmon|shrimp/, 'fish', {en:'Fish', ar:'سمك', es:'Pescado'}],
+  [/beans/, 'canned', {en:'Beans', ar:'فاصوليا', es:'Frijoles'}],
+  [/can(ned)?\b/, 'canned', {en:'Canned food', ar:'معلبات', es:'Conservas'}],
+  [/croissant|pastr/, 'croissant', {en:'Pastries', ar:'معجنات', es:'Bollería'}],
+  [/bread|toast|pita|\bbuns?\b|baguette/, 'bread', {en:'Bread', ar:'خبز', es:'Pan'}],
+  [/\brice\b/, 'rice', {en:'Rice', ar:'رز', es:'Arroz'}],
+  [/pasta|spaghetti|noodle|macaroni/, 'pasta', {en:'Pasta', ar:'معكرونة', es:'Pasta'}],
+  [/water/, 'water', {en:'Water', ar:'ماء', es:'Agua'}],
+  [/juice/, 'juice', {en:'Juice', ar:'عصير', es:'Zumo'}],
+  [/coffee/, 'coffee', {en:'Coffee', ar:'قهوة', es:'Café'}],
+  [/\btea\b/, 'tea', {en:'Tea', ar:'شاي', es:'Té'}],
+  [/cola|soda|soft drink/, 'soda', {en:'Soft drinks', ar:'مشروبات غازية', es:'Refrescos'}],
+  [/tomato/, 'tomato', {en:'Tomatoes', ar:'طماطم', es:'Tomates'}],
+  [/potato/, 'potato', {en:'Potatoes', ar:'بطاطس', es:'Patatas'}],
+  [/spinach|lettuce|salad|greens|kale/, 'greens', {en:'Greens', ar:'خضار ورقية', es:'Verduras de hoja'}],
+  [/cucumber/, 'cucumber', {en:'Cucumbers', ar:'خيار', es:'Pepinos'}],
+  [/carrot/, 'carrot', {en:'Carrots', ar:'جزر', es:'Zanahorias'}],
+  [/onion/, 'onion', {en:'Onions', ar:'بصل', es:'Cebollas'}],
+  [/broccoli/, 'broccoli', {en:'Broccoli', ar:'بروكلي', es:'Brócoli'}],
+  [/\bapples?\b/, 'apple', {en:'Apples', ar:'تفاح', es:'Manzanas'}],
+  [/banana/, 'banana', {en:'Bananas', ar:'موز', es:'Plátanos'}],
+  [/orange|citrus|tangerine|mandarin/, 'orange', {en:'Oranges', ar:'برتقال', es:'Naranjas'}],
+  [/lemon|lime/, 'lemon', {en:'Lemons', ar:'ليمون', es:'Limones'}],
+  [/strawberr|berr/, 'strawberry', {en:'Berries', ar:'توت', es:'Bayas'}],
+  [/grape/, 'grapes', {en:'Grapes', ar:'عنب', es:'Uvas'}],
+  [/avocado/, 'avocado', {en:'Avocados', ar:'أفوكادو', es:'Aguacates'}],
+  [/red (bell )?pepper/, 'pepper-red', {en:'Peppers', ar:'فلفل', es:'Pimientos'}],
+  [/pepper/, 'pepper', {en:'Peppers', ar:'فلفل', es:'Pimientos'}],
+  [/\bbar\b|chocolate/, 'bar', {en:'Bars', ar:'ألواح', es:'Barritas'}],
 ];
 const CATEGORY_ICONS = { dairy:'milk', meat:'chicken', produce:'broccoli', bakery:'bread', pantry:'canned' };
 
-function productIcon(it){
-  // name.generic: the plain English name kept when the item is shown under
-  // its receipt text (e.g. "ZUZU PR IAURT 2%150G"), so the icon still matches.
+// name.generic: the plain English name kept when the item is shown under its
+// receipt text (e.g. "ZUZU PR IAURT 2%150G"), so type matching still works.
+function productType(it){
   const name = String((it.name && (it.name.generic || it.name.en)) || '').toLowerCase();
-  const hit = PRODUCT_ICONS.find(([re]) => re.test(name));
-  const slug = hit ? hit[1] : (CATEGORY_ICONS[it.category] || 'canned');
+  return PRODUCT_TYPES.find(([re]) => re.test(name)) || null;
+}
+
+function productIcon(it){
+  const type = productType(it);
+  const slug = type ? type[1] : (CATEGORY_ICONS[it.category] || 'canned');
   return `<img class="item-3d" src="icons/food/${slug}.webp" alt="" loading="lazy">`;
 }
 
@@ -2135,14 +2169,25 @@ function itemRow(it, t, i, sub){
 }
 
 // --- Grouping same products (display only) ---
-// Key: English name (normalized) + category; demo items never mix with real
-// ones. Identical items (same expiry day) and same-name items with different
+// Key: product type (PRODUCT_TYPES, so tuna in oil and tuna in water share a
+// row), else English name (normalized) + category; demo items never mix with
+// real ones. Identical items (same expiry day) and same-name items with different
 // dates both collapse to one row with a ×N badge; the row shows the most
 // urgent date, and tapping it expands to every item with its own date.
 const expandedGroups = new Set();
 
 function groupKeyFor(it){
-  return (it.demo ? 'demo:' : '') + normalizeSearch((it.name && it.name.en) || '') + '|' + (it.category || 'pantry');
+  const type = productType(it);
+  const key = type ? 'type:' + type[2].en : normalizeSearch((it.name && it.name.en) || '') + '|' + (it.category || 'pantry');
+  return (it.demo ? 'demo:' : '') + key;
+}
+
+// A group of one product keeps its name; mixed products show the type label.
+function groupTitle(g){
+  const names = new Set(g.items.map(x => normalizeSearch(nameFor(x))));
+  if(names.size === 1) return nameFor(g.lead);
+  const type = productType(g.lead);
+  return type ? (type[2][currentLang] || type[2].en) : nameFor(g.lead);
 }
 
 function expiryDayKey(it){
@@ -2211,7 +2256,7 @@ function groupRow(g, t, i){
       <div class="status-dot ${statusFor(days)}"></div>
       <div class="item-icon${photoItem && safeThumb(photoItem.thumbnail) ? ' has-photo' : ''}">${itemIconHtml(photoItem || it)}<span class="qty-badge">×${g.items.length}</span></div>
       <div class="item-main" data-key="${escapeAttr(g.key)}" onclick="toggleGroup(this.dataset.key)" role="button" aria-expanded="${open}">
-        <div class="item-name">${escapeHtml(nameFor(it))}
+        <div class="item-name">${escapeHtml(groupTitle(g))}
           <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </div>
         <div class="item-sublabel ${sublabelClass}">${sublabel}</div>
