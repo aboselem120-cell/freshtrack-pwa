@@ -1022,6 +1022,7 @@ const translations = {
     noMatch:"AI couldn't recognize any grocery items in this photo. Try a clearer, well-lit shot.",
     aiError:"Something went wrong analyzing the photo. Please try again.",
     aiBusy:"The service is busy right now — please try again in a minute.",
+    recipeError:"Couldn't get a recipe right now. Please try again.",
     aiTimeout:"Request timed out — check your connection and try again.",
     secondPhotoHintTitle:"No printed date found — try photographing the other side or the bottom?",
     secondPhotoScanBtn:"Scan another angle",
@@ -1123,6 +1124,7 @@ const translations = {
     noMatch:'ما قدر الذكاء الاصطناعي يتعرف على أغراض بهذي الصورة. جرّب صورة أوضح بإضاءة أفضل.',
     aiError:'صار خلل أثناء تحليل الصورة. حاول مرة ثانية.',
     aiBusy:'الخدمة مزدحمة حاليًا — حاول بعد دقيقة.',
+    recipeError:'ما قدرنا نجيب وصفة الحين. حاول مرة ثانية.',
     aiTimeout:'انتهت مهلة الطلب — تأكد من اتصالك بالإنترنت وحاول مرة ثانية.',
     secondPhotoHintTitle:'ما لقينا تاريخًا مطبوعًا — تحب تصوّر الجانب الثاني أو الأسفل؟',
     secondPhotoScanBtn:'صوّر زاوية ثانية',
@@ -1225,6 +1227,7 @@ const translations = {
     noMatch:'La IA no pudo reconocer productos en esta foto. Prueba con una imagen más clara y bien iluminada.',
     aiError:'Algo salió mal al analizar la foto. Inténtalo de nuevo.',
     aiBusy:'El servicio está saturado en este momento — inténtalo en un minuto.',
+    recipeError:'No pudimos obtener una receta ahora. Inténtalo de nuevo.',
     aiTimeout:'Se agotó el tiempo de espera — revisa tu conexión e inténtalo de nuevo.',
     secondPhotoHintTitle:'No encontramos una fecha impresa — ¿quieres fotografiar el otro lado o la parte de abajo?',
     secondPhotoScanBtn:'Fotografiar otro ángulo',
@@ -2997,7 +3000,6 @@ async function requestRecipe(){
   if(!checkUsageLimit('recipe', RECIPE_DAILY_LIMIT)) return;
 
   const t = translations[currentLang];
-  bumpUsage('recipe');
   document.getElementById('recipeOverlay').classList.add('show');
   document.getElementById('recipeContent').innerHTML = `<div class="processing-label" style="text-align:left;">${t.processing}</div>`;
 
@@ -3011,10 +3013,17 @@ async function requestRecipe(){
       }),
     });
     const data = await readJson(response);
-    if(!response.ok) throw new Error(data.error || 'request failed');
+    if(!response.ok){
+      const err = new Error(data.error || 'request failed');
+      err.code = data.code;
+      throw err;
+    }
 
     const cleaned = (data.text || '').replace(/```json|```/g, '').trim();
     const recipe = JSON.parse(cleaned);
+    // Only successful recipes count toward the daily limit — failed attempts
+    // used to eat it while the service was busy.
+    bumpUsage('recipe');
 
     document.getElementById('recipeContent').innerHTML = `
       <h4>${escapeHtml(recipe.title || '')}</h4>
@@ -3022,7 +3031,7 @@ async function requestRecipe(){
     `;
   } catch(err){
     console.error(err);
-    document.getElementById('recipeContent').innerHTML = `<div class="no-match" style="padding:10px 0;">${t.aiError}</div>`;
+    document.getElementById('recipeContent').innerHTML = `<div class="no-match" style="padding:10px 0;">${err.code === 'busy' ? t.aiBusy : t.recipeError}</div>`;
   }
 }
 
