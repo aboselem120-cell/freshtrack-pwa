@@ -2058,10 +2058,13 @@ const PRODUCT_ICONS = [
   [/spinach|lettuce|salad|greens|kale/, '🥬'], [/cucumber/, '🥒'], [/carrot/, '🥕'], [/onion/, '🧅'],
   [/apple/, '🍎'], [/banana/, '🍌'], [/orange|citrus/, '🍊'], [/lemon|lime/, '🍋'], [/strawberr|berr/, '🍓'],
   [/grape/, '🍇'], [/avocado/, '🥑'], [/water/, '💧'], [/juice/, '🧃'], [/coffee/, '☕'],
+  [/pepper/, '🫑'], [/\btea\b/, '🍵'], [/cola|soda|soft drink/, '🥤'], [/\bbar\b|chocolate/, '🍫'],
 ];
 
 function productIcon(it){
-  const name = String((it.name && it.name.en) || '').toLowerCase();
+  // name.generic: the plain English name kept when the item is shown under
+  // its receipt text (e.g. "ZUZU PR IAURT 2%150G"), so the icon still matches.
+  const name = String((it.name && (it.name.generic || it.name.en)) || '').toLowerCase();
   const hit = PRODUCT_ICONS.find(([re]) => re.test(name));
   if(hit) return hit[1];
   return (categoryMeta[it.category] || categoryMeta.pantry).icon;
@@ -2686,7 +2689,7 @@ function addScannedItems(items, useReceiptNames){
     const printed = useReceiptNames && typeof it.receipt_name === 'string' && it.receipt_name.trim();
     return {
       id: newItemId(),
-      name: printed ? { en: printed, ar: printed, es: printed }
+      name: printed ? { en: printed, ar: printed, es: printed, generic: String((it.name && it.name.en) || '') }
         : it.name && typeof it.name === 'object' ? it.name : { en: String(it.name || ''), ar: String(it.name || ''), es: String(it.name || '') },
       category,
       expiryDate,
