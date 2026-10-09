@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="side" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#0B3C6E"/>
+      <stop offset="0.18" stop-color="#1767B3"/>
+      <stop offset="0.36" stop-color="#4FA3EE"/>
+      <stop offset="0.48" stop-color="#1E72C2"/>
+      <stop offset="0.85" stop-color="#11508F"/>
+      <stop offset="1" stop-color="#082E55"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#6A7076"/>
+      <stop offset="0.3" stop-color="#D2D7DC"/>
+      <stop offset="0.42" stop-color="#FFFFFF"/>
+      <stop offset="0.6" stop-color="#A9AFB5"/>
+      <stop offset="1" stop-color="#555A60"/>
+    </linearGradient>
+    <radialGradient id="lid" cx="0.42" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#FBFCFD"/>
+      <stop offset="0.55" stop-color="#CDD2D7"/>
+      <stop offset="1" stop-color="#8E949A"/>
+    </radialGradient>
+    <radialGradient id="shadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#000" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fish" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D6E8F7"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="128" cy="200" rx="96" ry="16" fill="url(#shadow)"/>
+  <!-- side wall -->
+  <path d="M40 112 v62 a88 24 0 0 0 176 0 v-62 z" fill="url(#side)"/>
+  <!-- metal rims -->
+  <path d="M40 168 a88 24 0 0 0 176 0 v8 a88 24 0 0 1 -176 0 z" fill="url(#metal)"/>
+  <path d="M40 112 a88 24 0 0 0 176 0 v8 a88 24 0 0 1 -176 0 z" fill="url(#metal)" opacity="0.9"/>
+  <!-- label: fish silhouette + word, generic -->
+  <g transform="translate(128 152)">
+    <path d="M-44 0 C -30 -16, 6 -18, 26 -4 L 40 -14 L 36 0 L 40 14 L 26 4 C 6 18, -30 16, -44 0 Z" fill="url(#fish)"/>
+    <circle cx="-30" cy="-3" r="2.6" fill="#11508F"/>
+    <path d="M-12 -10 q 6 10 0 20" stroke="#9CC6EA" stroke-width="2" fill="none"/>
+  </g>
+  <!-- lid -->
+  <ellipse cx="128" cy="112" rx="88" ry="24" fill="#7C8288"/>
+  <ellipse cx="128" cy="111" rx="83" ry="21.5" fill="url(#lid)"/>
+  <!-- concentric rings -->
+  <g fill="none" stroke="#9CA2A8" stroke-width="2">
+    <ellipse cx="128" cy="111" rx="72" ry="18"/>
+    <ellipse cx="128" cy="111" rx="58" ry="14.5" stroke="#B4BAC0"/>
+    <ellipse cx="128" cy="111" rx="44" ry="11" stroke="#B4BAC0"/>
+  </g>
+  <ellipse cx="128" cy="111" rx="72" ry="18" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.7" transform="translate(0 1.5)"/>
+  <!-- pull ring -->
+  <path d="M96 104 a16 7 0 1 1 0 14 a16 7 0 1 1 0 -14 z M96 107.5 a10 3.6 0 1 0 0 7.2 a10 3.6 0 1 0 0 -7.2 z" fill="#C3C9CF" fill-rule="evenodd" stroke="#858B91" stroke-width="1"/>
+  <path d="M110 108 h18 a4 3 0 0 1 0 6 h-18 z" fill="#B3B9BF" stroke="#858B91" stroke-width="1"/>
+  <ellipse cx="132" cy="111" rx="5" ry="2.4" fill="#8A9096"/>
+</svg>

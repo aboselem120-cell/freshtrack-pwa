@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="body" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#7A0C10"/>
+      <stop offset="0.12" stop-color="#C8141B"/>
+      <stop offset="0.3" stop-color="#F0333A"/>
+      <stop offset="0.38" stop-color="#FF8A8D"/>
+      <stop offset="0.46" stop-color="#E8222A"/>
+      <stop offset="0.78" stop-color="#B10F16"/>
+      <stop offset="1" stop-color="#5E080B"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#6E7378"/>
+      <stop offset="0.25" stop-color="#C9CED3"/>
+      <stop offset="0.38" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#AEB4BA"/>
+      <stop offset="0.85" stop-color="#80868C"/>
+      <stop offset="1" stop-color="#4E5358"/>
+    </linearGradient>
+    <radialGradient id="lid" cx="0.45" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#F4F6F8"/>
+      <stop offset="0.6" stop-color="#C3C9CF"/>
+      <stop offset="1" stop-color="#8A9097"/>
+    </radialGradient>
+    <linearGradient id="wave" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#D9D9D9"/>
+      <stop offset="0.35" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BDBDBD"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
+      <stop offset="0.3" stop-color="#FFF" stop-opacity="0.12"/>
+      <stop offset="0.38" stop-color="#FFF" stop-opacity="0.4"/>
+      <stop offset="0.48" stop-color="#FFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </linearGradient>
+    <radialGradient id="shadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#000" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="canClip"><path d="M80 52 h96 v158 a48 12 0 0 1 -96 0 z"/></clipPath>
+  </defs>
+  <ellipse cx="128" cy="226" rx="62" ry="10" fill="url(#shadow)"/>
+  <!-- body -->
+  <path d="M80 52 h96 v158 a48 12 0 0 1 -96 0 z" fill="url(#body)"/>
+  <!-- dark band with bubbles (generic, no brand) -->
+  <g clip-path="url(#canClip)">
+    <rect x="70" y="128" width="130" height="34" fill="#1A1A1A" opacity="0.85"/>
+    <rect x="70" y="131" width="130" height="2" fill="url(#wave)" opacity="0.9"/>
+    <rect x="70" y="157" width="130" height="2" fill="url(#wave)" opacity="0.9"/>
+    <g fill="#FFFFFF" opacity="0.9"><circle cx="112" cy="145" r="5"/><circle cx="128" cy="141" r="3.4"/><circle cx="141" cy="148" r="4.2"/><circle cx="153" cy="140" r="2.4"/></g>
+    <!-- droplets -->
+    <g fill="#FFFFFF" opacity="0.55">
+      <ellipse cx="101" cy="92" rx="2.4" ry="3.4"/><ellipse cx="148" cy="80" rx="1.8" ry="2.6"/>
+      <ellipse cx="158" cy="112" rx="2.6" ry="3.8"/><ellipse cx="96" cy="196" rx="2" ry="3"/>
+      <ellipse cx="139" cy="203" rx="2.4" ry="3.4"/><ellipse cx="118" cy="104" rx="1.5" ry="2.2"/>
+    </g>
+    <rect x="80" y="126" width="96" height="38" fill="url(#shade)"/>
+  </g>
+  <!-- bottom rim -->
+  <path d="M80 206 a48 12 0 0 0 96 0 v6 a48 12 0 0 1 -96 0 z" fill="url(#metal)"/>
+  <!-- neck -->
+  <path d="M80 52 C 82 40, 90 34, 96 32 h64 c6 2 14 8 16 20 z" fill="url(#metal)"/>
+  <!-- lid -->
+  <ellipse cx="128" cy="32" rx="33" ry="8.5" fill="#7D8389"/>
+  <ellipse cx="128" cy="31.5" rx="30" ry="7" fill="url(#lid)"/>
+  <!-- pull tab -->
+  <path d="M120 29 h16 a6 3.2 0 0 1 0 6.4 h-16 a6 3.2 0 0 1 0 -6.4 z" fill="#B9BFC5" stroke="#8C9298" stroke-width="1"/>
+  <ellipse cx="131" cy="32.2" rx="3.5" ry="1.6" fill="#6E747A"/>
+</svg>
