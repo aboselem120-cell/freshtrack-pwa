@@ -691,14 +691,14 @@
 
   /* ===== 3D product icons + status bar ===== */
   .item{ position:relative; }
-  .item-icon{ width:40px; height:40px; background:none; border-radius:0; }
+  .item-icon{ width:44px; height:44px; background:none; border-radius:0; }
   .item-3d{ width:100%; height:100%; object-fit:contain; display:block; }
-  /* The status dot became a bar along the card's leading edge. */
+  /* The status dot became a bar flush with the card's leading edge, full row
+     height; .group-card's overflow:hidden rounds it at the card corners. */
   .item .status-dot{
-    position:absolute; inset-inline-start:0; top:10px; bottom:10px;
-    width:4px; height:auto; margin:0; border-radius:0 4px 4px 0; box-shadow:none; animation:none;
+    position:absolute; inset-inline-start:0; top:0; bottom:0;
+    width:4px; height:auto; margin:0; border-radius:0; box-shadow:none; animation:none;
   }
-  [dir="rtl"] .item .status-dot{ border-radius:4px 0 0 4px; }
   .item .status-dot.fresh{ background:#395B48; }
   .item .status-dot.soon{ background:#F0A23B; }
   .item .status-dot.urgent{ background:#E5533D; }
@@ -992,6 +992,7 @@
     <div id="statsBox" style="font-size:13px; color:var(--ink-soft);"></div>
 
     <div style="margin-top:22px; text-decoration:underline; cursor:pointer; font-size:11px; color:var(--ink-soft);" onclick="toggleRawText()">Diagnostics</div>
+    <a href="credits.html" style="display:block; margin-top:8px; font-size:11px; color:var(--ink-soft);">Image credits</a>
     <pre id="rawTextBox" style="display:none; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:10px; margin-top:8px; font-size:10px; font-family:'IBM Plex Mono',monospace; white-space:pre-wrap; word-break:break-word; max-height:120px; overflow:auto; direction:ltr; text-align:left;"></pre>
 
     <button class="close-sheet" onclick="closeSettings()" data-t="doneBtn">Done</button>
@@ -2063,7 +2064,7 @@ function daysUntil(expiryDate){
 
 // Small product icon for the list: matched from the English name, falling
 // back to the category icon. Stand-in until real item photos are added.
-// 3D food icons (Microsoft Fluent Emoji, MIT) in icons/food/. First match
+// Food photos (Wikimedia Commons, see credits.html) in icons/food/. First match
 // wins, so specific names come before the generic ones they contain.
 const PRODUCT_ICONS = [
   [/milk|laban|ayran/, 'milk'], [/egg/, 'egg'], [/yog(h)?urt|labneh|labne/, 'yogurt'],
@@ -2086,7 +2087,7 @@ function productIcon(it){
   const name = String((it.name && (it.name.generic || it.name.en)) || '').toLowerCase();
   const hit = PRODUCT_ICONS.find(([re]) => re.test(name));
   const slug = hit ? hit[1] : (CATEGORY_ICONS[it.category] || 'canned');
-  return `<img class="item-3d" src="icons/food/${slug}.png" alt="" loading="lazy">`;
+  return `<img class="item-3d" src="icons/food/${slug}.webp" alt="" loading="lazy">`;
 }
 
 // Explicit, always-visible distinction — not just a hover tooltip — between a
