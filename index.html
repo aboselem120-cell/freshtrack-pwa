@@ -2613,7 +2613,12 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   }
 
   const today = new Date(); today.setHours(0,0,0,0);
-  const newItems = items.map(it=>{
+  // A receipt line like "7 x yogurt" becomes 7 items, which the list groups
+  // as one row with a ×7 badge. Capped so a misread count can't flood it.
+  const newItems = items.flatMap(it=>{
+    const qty = Math.min(Math.max(parseInt(it.quantity, 10) || 1, 1), 24);
+    return Array.from({ length: qty }, () => it);
+  }).map(it=>{
     let expiryDate, fromLabel;
     const d = plausibleExpiry(it.expiry_date);
     if(d){
@@ -2639,7 +2644,7 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
 
   // Photo thumbnail only for a single product: one receipt photo says nothing
   // about each of its items, so those keep the icon fallback.
-  if(newItems.length === 1 && pendingThumbnail) newItems[0].thumbnail = pendingThumbnail;
+  if(items.length === 1 && pendingThumbnail) newItems[0].thumbnail = pendingThumbnail;
   pendingThumbnail = null;
 
   // Scans accumulate into one running list (a fridge inventory), not replace it.
@@ -2660,7 +2665,7 @@ function finishAIResult(result, hadError, errorDetail, friendlyMessage){
   // scan another angle in case the date is on a side this photo didn't show.
   // Skipped for multi-item results (receipts), which don't have "another side".
   // (Not after 3 angles were already sent — there's no further angle to add.)
-  if(newItems.length === 1 && !newItems[0].fromLabel && lastScannedImageBase64 && lastShotCount < 3){
+  if(items.length === 1 && !newItems[0].fromLabel && lastScannedImageBase64 && lastShotCount < 3){
     showSecondPhotoHint(newItems[0].id);
   }
 }

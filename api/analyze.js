@@ -16,6 +16,11 @@ const AI_SYSTEM_PROMPT = `You are a grocery item recognition assistant. You will
 Identify every distinct food/grocery item clearly visible or listed. Ignore non-food items. For each item return:
 - name: short common product name, in English, Arabic, and Spanish
 - category: exactly one of "dairy", "meat", "produce", "bakery", "pantry" (pick the closest fit)
+- quantity: how many separate units of this item were bought, as an integer.
+  On a receipt, read the count printed on the item's line (e.g. "7,000 Buc x
+  4,29", "3 x 5.25", "QTY 4"); "Buc"/"pcs"/"x" lines give the unit count.
+  Items sold by weight (Kg/kg/g, e.g. "1,240 Kg x 3,99") count as 1. For a
+  photo, count the identical packages visible. Default 1 when unsure.
 - expiry_raw: FIRST, copy the expiry date text exactly as printed, character
   for character, including its label (e.g. "EXP 03.11.2027", "BB 1503 27",
   "صالح حتى ٢٠٢٧/٠٣/١٥"). Do not reformat or fix anything here. null if no
@@ -97,7 +102,7 @@ CRITICAL — receipts do not print per-item expiry dates:
 A store receipt's printed date (near the top or bottom, often next to a time, terminal number, or "thank you" line) is the TRANSACTION/PURCHASE date, not an expiry date for any item. NEVER copy a receipt's transaction date into any item's expiry_date field. When scanning a receipt (a list of item names with prices, no individual packaging visible), expiry_date must be null for every item — always use estimated_days instead. Only set expiry_date when you can see an individual product's actual packaging with a date printed on it (a single jar/carton/package photo, not a printed receipt).
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:
-{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","expiry_raw":"..."|null,"expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
+{"items":[{"name":{"en":"...","ar":"...","es":"..."},"category":"...","quantity":N,"expiry_raw":"..."|null,"expiry_date":"YYYY-MM-DD"|null,"estimated_days":N|null}]}
 
 If you cannot confidently identify any grocery item in the photo, respond with {"items":[]}.`;
 
